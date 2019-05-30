@@ -1,12 +1,17 @@
 # Much stolen from lazyfoo's SDL tutorial
 
-OBJS = pf.cpp
+# Variables
+ROOTDIR := ..
+
+# Source
+OBJS := pf.cpp
+OBJS += $(ROOTDIR)/common/graphics.cpp
 
 # Compiler
-CC = g++
+CC := g++
 
 # Warnings
-COMPILER_FLAGS =  -Wall
+COMPILER_FLAGS := -Wall
 COMPILER_FLAGS += -Wextra
 COMPILER_FLAGS += -Werror
 
@@ -20,7 +25,12 @@ COMPILER_FLAGS += -std=c++14
 # Linker flags
 LINKER_FLAGS   += -lSDL2
 
-OBJ_NAME = particlefilter
+# Includes
+INCDIRS  := $(ROOTDIR)/common
+INCDIRS  += $(ROOTDIR)/unoptimized
+INCLUDES := $(patsubst %, -I%, $(INCDIRS))
+
+OBJ_NAME := particlefilter.out
 
 all: $(OBJS)
-	$(CC) $(OBJS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(OBJ_NAME)
+	$(CC) $(OBJS) $(INCLUDES) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(OBJ_NAME)
