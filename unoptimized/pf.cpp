@@ -15,6 +15,7 @@ const int SCREEN_HEIGHT = 480;
         if (!(predicate))\
         {\
             std::cout << errormsg << "Error: " << SDL_GetError() << "\n";\
+            SDL_Quit();\
             exit(-1);\
         }\
     } while(0)
