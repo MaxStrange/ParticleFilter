@@ -3,13 +3,16 @@
  */
 #pragma once
 
+#include <SDL2/SDL.h>
+#include "state.h"
+
 class Graphics
 {
 public:
     /**
      * Default constructor. Uses default values for window size.
      */
-    Graphics();
+    Graphics(void);
 
     /**
      * Parameterized constructor. Uses given width and height values for window size.
@@ -29,7 +32,7 @@ public:
     /**
      * Updates the screen with the newest information. Returns nonzero if there is an error.
      */
-    int update(void);
+    int update(State &state);
 
     /**
      * Returns whether we are done or not.
@@ -40,4 +43,14 @@ private:
     bool done;
     int screen_width;
     int screen_height;
+
+    SDL_Window *window;
+    SDL_Surface *screensurface;
+    SDL_Surface *background;
+
+    /** Process the event queue, handling any user input. */
+    int process_event_queue(void);
+
+    /** Update the screen with drawings. */
+    int update_image(State &state);
 };

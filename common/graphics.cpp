@@ -11,6 +11,9 @@ Graphics::Graphics(void)
     this->done = false;
     this->screen_width = DEFAULT_SCREEN_WIDTH;
     this->screen_height = DEFAULT_SCREEN_HEIGHT;
+    this->window = nullptr;
+    this->screensurface = nullptr;
+    this->background = nullptr;
 }
 
 Graphics::Graphics(int width, int height)
@@ -18,13 +21,14 @@ Graphics::Graphics(int width, int height)
     this->done = false;
     this->screen_width = width;
     this->screen_height = height;
+    this->window = nullptr;
+    this->screensurface = nullptr;
+    this->background = nullptr;
 }
 
 int Graphics::init(void)
 {
     int err;
-    SDL_Window *window = nullptr;
-    SDL_Surface *screensurface = nullptr;
 
     err = SDL_Init(SDL_INIT_VIDEO);
     if (err)
@@ -32,15 +36,24 @@ int Graphics::init(void)
         goto fail;
     }
 
-    window = SDL_CreateWindow("Particle Filter (Unoptimized)", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, this->screen_width, this->screen_height, SDL_WINDOW_SHOWN);
-    if (window == nullptr)
+    this->window = SDL_CreateWindow("Particle Filter (Unoptimized)", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, this->screen_width, this->screen_height, SDL_WINDOW_SHOWN);
+    if (this->window == nullptr)
     {
+        err = __LINE__;
         goto fail;
     }
 
-    screensurface = SDL_GetWindowSurface(window);
-    if (screensurface == nullptr)
+    this->screensurface = SDL_GetWindowSurface(this->window);
+    if (this->screensurface == nullptr)
     {
+        err = __LINE__;
+        goto fail;
+    }
+
+    this->background = SDL_LoadBMP("maze.bmp");
+    if (this->background == nullptr)
+    {
+        err = __LINE__;
         goto fail;
     }
 
@@ -55,7 +68,29 @@ int Graphics::exit(void)
     return 0;
 }
 
-int Graphics::update(void)
+int Graphics::update(State &state)
+{
+    int ret = 0;
+
+    // Update based on state
+    ret |= this->update_image(state);
+
+    // Update based on event queue
+    ret |= this->process_event_queue();
+
+    return ret;
+}
+
+bool Graphics::isdone(void)
+{
+    return this->done;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////// Private Functions ////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////
+
+int Graphics::process_event_queue(void)
 {
     SDL_Event e;
 
@@ -78,7 +113,24 @@ int Graphics::update(void)
     return 0;
 }
 
-bool Graphics::isdone(void)
+int Graphics::update_image(State &state)
 {
-    return this->done;
+    int err;
+
+    // TODO: Update based on state
+
+    err = SDL_BlitSurface(this->background, nullptr, this->screensurface, nullptr);
+    if (err)
+    {
+        goto fail;
+    }
+
+    err = SDL_UpdateWindowSurface(this->window);
+    if (err)
+    {
+        goto fail;
+    }
+
+fail:
+    return err;
 }

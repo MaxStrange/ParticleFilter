@@ -4,13 +4,15 @@
  */
 #include <iostream>
 #include "graphics.h"
+#include "state.h"
+#include "unoptimizedparticlefilter.h"
 
 /** Exit macro: If err, print errormsg and exit cleanly. */
 #define CHECK_EXIT(err, errormsg, g) do \
     {\
         if (err)\
         {\
-            std::cout << errormsg << "\n";\
+            std::cout << errormsg << " Error: " << err << "\n";\
             g.exit();\
             exit(-1);\
         }\
@@ -20,7 +22,9 @@ int main(void)
 {
     int err;
 
+    UnoptimizedParticleFilter pf;
     Graphics gfx;
+    State state(&pf);
 
     err = gfx.init();
     CHECK_EXIT(err, "SDL could not initialize!", gfx);
@@ -29,7 +33,7 @@ int main(void)
     while (!done)
     {
         // Update the graphics
-        gfx.update();
+        gfx.update(&state);
 
         // Get user input
         done = gfx.isdone();
