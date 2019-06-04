@@ -33,7 +33,7 @@ int main(void)
     while (!done)
     {
         // Update the graphics
-        gfx.update(&state);
+        gfx.update(state);
 
         // Get user input
         done = gfx.isdone();
