@@ -7,6 +7,12 @@
 const int DEFAULT_SCREEN_WIDTH  = 640;
 const int DEFAULT_SCREEN_HEIGHT = 480;
 
+/** Colors */
+const uint8_t ROBOT_RED     = 0x00;
+const uint8_t ROBOT_GREEN   = 0x00;
+const uint8_t ROBOT_BLUE    = 0xFF;
+const uint8_t ROBOT_ALPHA   = 0xFF;
+
 Graphics::Graphics(void)
 {
     this->done = false;
@@ -16,7 +22,6 @@ Graphics::Graphics(void)
     this->screensurface = nullptr;
     this->background = nullptr;
     this->renderer = nullptr;
-    this->robottexture = Texture();
 }
 
 Graphics::Graphics(int width, int height)
@@ -58,7 +63,7 @@ int Graphics::init(void)
         goto fail;
     }
 
-    this->renderer = SDL_CreateRenderer(this->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC );
+    this->renderer = SDL_CreateRenderer(this->window, -1, SDL_RENDERER_ACCELERATED);
     if (this->renderer == nullptr)
     {
         err = __LINE__;
@@ -73,13 +78,6 @@ int Graphics::init(void)
     }
 
     if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG))
-    {
-        err = __LINE__;
-        goto fail;
-    }
-
-    err = this->robottexture.load_from_file("dot.bmp", this->renderer);
-    if (err)
     {
         err = __LINE__;
         goto fail;
@@ -150,6 +148,7 @@ int Graphics::process_event_queue(void)
 int Graphics::update_image(const Robot &robot)
 {
     int err;
+    SDL_Rect robotrect = { robot.get_xloc(), robot.get_yloc(), robot.get_width(), robot.get_height() };
 
     /* Clear the screen */
     err = SDL_SetRenderDrawColor(this->renderer, 0xFF, 0xFF, 0xFF, 0xFF);
@@ -165,7 +164,8 @@ int Graphics::update_image(const Robot &robot)
     }
 
     /* Paint the robot */
-    this->robottexture.render(this->renderer, robot.get_xloc(), robot.get_yloc());
+    SDL_SetRenderDrawColor(this->renderer, ROBOT_RED, ROBOT_GREEN, ROBOT_BLUE, ROBOT_ALPHA);
+    SDL_RenderFillRect(this->renderer, &robotrect);
 
     /* Paint the particles */
     // TODO

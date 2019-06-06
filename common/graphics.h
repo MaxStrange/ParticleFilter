@@ -5,7 +5,6 @@
 
 #include <SDL2/SDL.h>
 #include "robot.h"
-#include "texture.h"
 
 class Graphics
 {
@@ -52,8 +51,6 @@ private:
     SDL_Surface *screensurface;
     SDL_Surface *background;
     SDL_Renderer *renderer;
-
-    Texture robottexture;
 
     /** Process the event queue, handling any user input. */
     int process_event_queue(void);

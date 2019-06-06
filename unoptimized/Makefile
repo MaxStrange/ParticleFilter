@@ -9,7 +9,6 @@ OBJS += unoptimizedparticlefilter.cpp
 OBJS += $(ROOTDIR)/common/graphics.cpp
 OBJS += $(ROOTDIR)/common/particlefilter.cpp
 OBJS += $(ROOTDIR)/common/robot.cpp
-OBJS += $(ROOTDIR)/common/texture.cpp
 
 # Compiler
 CC := g++

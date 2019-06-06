@@ -13,7 +13,8 @@ public:
     Robot(void);
     ~Robot(void);
 
-    int get_radius(void) const;
+    int get_height(void) const;
+    int get_width(void) const;
     int get_xloc(void) const;
     int get_yloc(void) const;
 
@@ -34,7 +35,8 @@ private:
     int yvel;
 
     // display
-    int radius;
+    int height;
+    int width;
 
     std::uniform_int_distribution<std::mt19937::result_type> distribution;
     std::mt19937 rng;

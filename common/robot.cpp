@@ -11,7 +11,8 @@ Robot::Robot(void)
     this->yloc = 0;
     this->xvel = 0;
     this->yvel = 0;
-    this->radius = 10;
+    this->height = 10;
+    this->width = 10;
 
     std::random_device dev;
     this->rng = std::mt19937(dev());
@@ -22,9 +23,14 @@ Robot::~Robot(void)
 {
 }
 
-int Robot::get_radius(void) const
+int Robot::get_height(void) const
 {
-    return this->radius;
+    return this->height;
+}
+
+int Robot::get_width(void) const
+{
+    return this->width;
 }
 
 int Robot::get_xloc(void) const
