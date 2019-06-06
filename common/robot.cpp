@@ -49,6 +49,4 @@ void Robot::update(int height_limit, int width_limit)
     this->xloc = (this->xloc < 0) ? 0 : this->xloc;
     this->yloc = (this->yloc > height_limit) ? width_limit : this->yloc;
     this->yloc = (this->yloc < 0) ? 0 : this->yloc;
-
-    std::cout << "Position: (" << this->xloc << ", " << this->yloc << ")" << std::endl;
 }

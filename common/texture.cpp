@@ -67,7 +67,6 @@ fail:
     return err;
 }
 
-
 int Texture::render(SDL_Renderer *renderer, int x, int y, const SDL_Rect *clip/*=nullptr*/, double angle/*=0.0*/, const SDL_Point *center/*=nullptr*/, SDL_RendererFlip flip/*=SDL_FLIP_NONE*/)
 {
     SDL_Rect renderquad = {

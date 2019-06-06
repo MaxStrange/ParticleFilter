@@ -1,5 +1,6 @@
 #include <iostream>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include "graphics.h"
 
 /** Screen dimensions constants */
@@ -57,15 +58,21 @@ int Graphics::init(void)
         goto fail;
     }
 
-    this->screensurface = SDL_GetWindowSurface(this->window);
-    if (this->screensurface == nullptr)
+    this->renderer = SDL_CreateRenderer(this->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC );
+    if (this->renderer == nullptr)
     {
         err = __LINE__;
         goto fail;
     }
 
-    this->renderer = SDL_CreateRenderer(this->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC );
-    if (this->renderer == nullptr)
+    err = SDL_SetRenderDrawColor(this->renderer, 0xFF, 0xFF, 0xFF, 0xFF);
+    if (err)
+    {
+        err = __LINE__;
+        goto fail;
+    }
+
+    if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG))
     {
         err = __LINE__;
         goto fail;
@@ -84,6 +91,12 @@ fail:
 
 int Graphics::exit(void)
 {
+    SDL_DestroyRenderer(this->renderer);
+    SDL_DestroyWindow(this->window);
+    this->renderer = nullptr;
+    this->window = nullptr;
+
+    IMG_Quit();
     SDL_Quit();
 
     return 0;
