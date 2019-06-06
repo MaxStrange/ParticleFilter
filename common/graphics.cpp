@@ -14,6 +14,8 @@ Graphics::Graphics(void)
     this->window = nullptr;
     this->screensurface = nullptr;
     this->background = nullptr;
+    this->renderer = nullptr;
+    this->robottexture = Texture();
 }
 
 Graphics::Graphics(int width, int height)
@@ -24,6 +26,17 @@ Graphics::Graphics(int width, int height)
     this->window = nullptr;
     this->screensurface = nullptr;
     this->background = nullptr;
+    this->renderer = nullptr;
+}
+
+int Graphics::get_screenheight(void) const
+{
+    return this->screen_height;
+}
+
+int Graphics::get_screenwidth(void) const
+{
+    return this->screen_width;
 }
 
 int Graphics::init(void)
@@ -33,10 +46,11 @@ int Graphics::init(void)
     err = SDL_Init(SDL_INIT_VIDEO);
     if (err)
     {
+        err = __LINE__;
         goto fail;
     }
 
-    this->window = SDL_CreateWindow("Particle Filter (Unoptimized)", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, this->screen_width, this->screen_height, SDL_WINDOW_SHOWN);
+    this->window = SDL_CreateWindow("Particle Filter", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, this->screen_width, this->screen_height, SDL_WINDOW_SHOWN);
     if (this->window == nullptr)
     {
         err = __LINE__;
@@ -50,8 +64,15 @@ int Graphics::init(void)
         goto fail;
     }
 
-    this->background = SDL_LoadBMP("maze.bmp");
-    if (this->background == nullptr)
+    this->renderer = SDL_CreateRenderer(this->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC );
+    if (this->renderer == nullptr)
+    {
+        err = __LINE__;
+        goto fail;
+    }
+
+    err = this->robottexture.load_from_file("dot.bmp", this->renderer);
+    if (err)
     {
         err = __LINE__;
         goto fail;
@@ -68,12 +89,12 @@ int Graphics::exit(void)
     return 0;
 }
 
-int Graphics::update(State &state)
+int Graphics::update(const Robot &robot)
 {
     int ret = 0;
 
     // Update based on state
-    ret |= this->update_image(state);
+    ret |= this->update_image(robot);
 
     // Update based on event queue
     ret |= this->process_event_queue();
@@ -113,23 +134,31 @@ int Graphics::process_event_queue(void)
     return 0;
 }
 
-int Graphics::update_image(State &state)
+int Graphics::update_image(const Robot &robot)
 {
     int err;
 
-    // TODO: Update based on state
-
-    err = SDL_BlitSurface(this->background, nullptr, this->screensurface, nullptr);
+    /* Clear the screen */
+    err = SDL_SetRenderDrawColor(this->renderer, 0xFF, 0xFF, 0xFF, 0xFF);
     if (err)
     {
         goto fail;
     }
 
-    err = SDL_UpdateWindowSurface(this->window);
+    err = SDL_RenderClear(this->renderer);
     if (err)
     {
         goto fail;
     }
+
+    /* Paint the robot */
+    this->robottexture.render(this->renderer, robot.get_xloc(), robot.get_yloc());
+
+    /* Paint the particles */
+    // TODO
+
+    /* Update the screen */
+    SDL_RenderPresent(this->renderer);
 
 fail:
     return err;

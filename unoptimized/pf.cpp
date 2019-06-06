@@ -3,8 +3,10 @@
  * https://lazyfoo.net/tutorials/SDL/
  */
 #include <iostream>
+#include <string>
+#include <unistd.h>
 #include "graphics.h"
-#include "state.h"
+#include "robot.h"
 #include "unoptimizedparticlefilter.h"
 
 /** Exit macro: If err, print errormsg and exit cleanly. */
@@ -21,10 +23,9 @@
 int main(void)
 {
     int err;
-
-    UnoptimizedParticleFilter pf;
     Graphics gfx;
-    State state(&pf);
+    UnoptimizedParticleFilter pf;
+    Robot robot;
 
     err = gfx.init();
     CHECK_EXIT(err, "SDL could not initialize!", gfx);
@@ -33,12 +34,16 @@ int main(void)
     while (!done)
     {
         // Update the graphics
-        gfx.update(state);
+        gfx.update(robot);
 
         // Get user input
         done = gfx.isdone();
 
-        // Derive new state (using particle filter)
+        // Derive new state of robot
+        robot.update(gfx.get_screenheight(), gfx.get_screenwidth());
+
+        // Derive new state of particles (using particle filter)
+        // TODO
     }
 
     gfx.exit();

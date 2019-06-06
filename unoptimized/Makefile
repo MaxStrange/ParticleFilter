@@ -5,12 +5,11 @@ ROOTDIR := ..
 
 # Source
 OBJS := pf.cpp
-OBJS := unoptimizedparticlefilter.cpp
+OBJS += unoptimizedparticlefilter.cpp
 OBJS += $(ROOTDIR)/common/graphics.cpp
-OBJS += $(ROOTDIR)/common/maze.cpp
 OBJS += $(ROOTDIR)/common/particlefilter.cpp
 OBJS += $(ROOTDIR)/common/robot.cpp
-OBJS += $(ROOTDIR)/common/state.cpp
+OBJS += $(ROOTDIR)/common/texture.cpp
 
 # Compiler
 CC := g++
@@ -28,7 +27,8 @@ COMPILER_FLAGS += -ggdb
 COMPILER_FLAGS += -std=c++14
 
 # Linker flags
-LINKER_FLAGS   += -lSDL2
+LINKER_FLAGS   := -lSDL2
+LINKER_FLAGS   += -lSDL2_image
 
 # Includes
 INCDIRS  := $(ROOTDIR)/common

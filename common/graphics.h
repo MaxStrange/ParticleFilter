@@ -4,7 +4,8 @@
 #pragma once
 
 #include <SDL2/SDL.h>
-#include "state.h"
+#include "robot.h"
+#include "texture.h"
 
 class Graphics
 {
@@ -19,6 +20,9 @@ public:
      */
     Graphics(int width, int height);
 
+    int get_screenwidth(void) const;
+    int get_screenheight(void) const;
+
     /**
      * Initialize the graphics library. Return nonzero if it fails.
      */
@@ -32,7 +36,7 @@ public:
     /**
      * Updates the screen with the newest information. Returns nonzero if there is an error.
      */
-    int update(State &state);
+    int update(const Robot &robot);
 
     /**
      * Returns whether we are done or not.
@@ -47,10 +51,13 @@ private:
     SDL_Window *window;
     SDL_Surface *screensurface;
     SDL_Surface *background;
+    SDL_Renderer *renderer;
+
+    Texture robottexture;
 
     /** Process the event queue, handling any user input. */
     int process_event_queue(void);
 
     /** Update the screen with drawings. */
-    int update_image(State &state);
+    int update_image(const Robot &robot);
 };

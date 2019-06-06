@@ -1,6 +1,6 @@
 #pragma once
 
-#include "maze.h"
+#include <random>
 
 /**
  * The Robot is the agent that moves around the maze with the help of the particle filter.
@@ -13,9 +13,29 @@ public:
     Robot(void);
     ~Robot(void);
 
+    int get_radius(void) const;
+    int get_xloc(void) const;
+    int get_yloc(void) const;
+
+    /**
+     * Update the robot's position by xvel and yvel and update
+     * xvel and yvel by a small random amount. Assures the robot
+     * does not go out of the limits provided.
+     */
+    void update(int height_limit, int width_limit);
+
 private:
-    maze_unit_t xloc;
-    maze_unit_t yloc;
-    maze_unit_t xvel;
-    maze_unit_t yvel;
+    // location
+    int xloc;
+    int yloc;
+
+    // velocity
+    int xvel;
+    int yvel;
+
+    // display
+    int radius;
+
+    std::uniform_int_distribution<std::mt19937::result_type> distribution;
+    std::mt19937 rng;
 };
