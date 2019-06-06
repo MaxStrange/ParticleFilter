@@ -5,8 +5,11 @@
 class UnoptimizedParticleFilter : public ParticleFilter
 {
 public:
-    UnoptimizedParticleFilter(void);
+    UnoptimizedParticleFilter(unsigned int nparticles);
     ~UnoptimizedParticleFilter(void);
+
+    /** Override from parent class */
+    void update(const Robot &robot);
 
 private:
 };

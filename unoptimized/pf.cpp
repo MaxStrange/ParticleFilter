@@ -9,6 +9,9 @@
 #include "robot.h"
 #include "unoptimizedparticlefilter.h"
 
+/** The number of particles for this test */
+#define NPARTICLES 100
+
 /** Exit macro: If err, print errormsg and exit cleanly. */
 #define CHECK_EXIT(err, errormsg, g) do \
     {\
@@ -24,7 +27,7 @@ int main(void)
 {
     int err;
     Graphics gfx;
-    UnoptimizedParticleFilter pf;
+    UnoptimizedParticleFilter pf(NPARTICLES);
     Robot robot;
 
     err = gfx.init();

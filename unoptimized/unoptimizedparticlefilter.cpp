@@ -1,11 +1,17 @@
+#include "robot.h"
 #include "unoptimizedparticlefilter.h"
 
-UnoptimizedParticleFilter::UnoptimizedParticleFilter(void)
+UnoptimizedParticleFilter::UnoptimizedParticleFilter(unsigned int nparticles)
+    : ParticleFilter(nparticles)
 {
-    // TODO
 }
 
 UnoptimizedParticleFilter::~UnoptimizedParticleFilter(void)
+{
+    // Parent's destructor called automatically
+}
+
+void UnoptimizedParticleFilter::update(const Robot &robot)
 {
     // TODO
 }
