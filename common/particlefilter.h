@@ -12,7 +12,7 @@ public:
     virtual ~ParticleFilter(void);
 
     /** Update the particle filter. Call this every time we get new measurements from the robot. */
-    virtual void update(const Robot &robot) = 0;
+    virtual void update(Robot &robot) = 0;
 
 protected:
     /** Particle's X locations. Malloc'd array. */
@@ -23,4 +23,7 @@ protected:
 
     /** Particle's weights. Malloc'd array. */
     double *particles_weights;
+
+    /** Number of particles in the filter. */
+    unsigned int nparticles;
 };

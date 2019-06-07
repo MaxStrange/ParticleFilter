@@ -27,7 +27,7 @@ int main(void)
 {
     int err;
     Graphics gfx;
-    UnoptimizedParticleFilter pf(NPARTICLES);
+    UnoptimizedParticleFilter pf(NPARTICLES, gfx.get_screenheight(), gfx.get_screenwidth());
     Robot robot;
 
     err = gfx.init();
@@ -46,7 +46,7 @@ int main(void)
         robot.update(gfx.get_screenheight(), gfx.get_screenwidth());
 
         // Derive new state of particles (using particle filter)
-        // TODO
+        pf.update(robot);
     }
 
     gfx.exit();

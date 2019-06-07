@@ -43,13 +43,20 @@ int Robot::get_yloc(void) const
     return this->yloc;
 }
 
+void Robot::get_xy_estimate(int *x, int *y)
+{
+    // Return noisy estimate of my location
+    *x = (this->distribution(this->rng) * 2) + this->get_xloc();
+    *y = (this->distribution(this->rng) * 2) + this->get_yloc();
+}
+
 void Robot::update(int height_limit, int width_limit)
 {
     this->xloc += this->xvel;
     this->yloc += this->yvel;
 
-    this->xvel = this->distribution(rng);
-    this->yvel = this->distribution(rng);
+    this->xvel = this->distribution(this->rng);
+    this->yvel = this->distribution(this->rng);
 
     this->xloc = (this->xloc > width_limit) ? width_limit : this->xloc;
     this->xloc = (this->xloc < 0) ? 0 : this->xloc;

@@ -18,6 +18,9 @@ public:
     int get_xloc(void) const;
     int get_yloc(void) const;
 
+    /** Gets a noisy measurement of the robot's x and y location */
+    void get_xy_estimate(int *x, int *y);
+
     /**
      * Update the robot's position by xvel and yvel and update
      * xvel and yvel by a small random amount. Assures the robot
