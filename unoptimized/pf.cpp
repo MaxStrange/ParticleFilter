@@ -37,7 +37,7 @@ int main(void)
     while (!done)
     {
         // Update the graphics
-        gfx.update(robot);
+        gfx.update(robot, pf);
 
         // Get user input
         done = gfx.isdone();

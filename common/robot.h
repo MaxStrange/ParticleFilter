@@ -21,6 +21,9 @@ public:
     /** Gets a noisy measurement of the robot's x and y location */
     void get_xy_estimate(int *x, int *y);
 
+    /** Gets a noisy measurement of the robot's x and y velocity */
+    void get_v_estimate(int *vx, int *vy);
+
     /**
      * Update the robot's position by xvel and yvel and update
      * xvel and yvel by a small random amount. Assures the robot

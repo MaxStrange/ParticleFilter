@@ -11,6 +11,10 @@ public:
     ParticleFilter(unsigned int nparticles);
     virtual ~ParticleFilter(void);
 
+    virtual unsigned int get_nparticles(void) const = 0;
+    virtual int get_xpos(unsigned int index) const = 0;
+    virtual int get_ypos(unsigned int index) const = 0;
+
     /** Update the particle filter. Call this every time we get new measurements from the robot. */
     virtual void update(Robot &robot) = 0;
 

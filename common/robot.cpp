@@ -50,6 +50,13 @@ void Robot::get_xy_estimate(int *x, int *y)
     *y = (this->distribution(this->rng) * 2) + this->get_yloc();
 }
 
+void Robot::get_v_estimate(int *vx, int *vy)
+{
+    // Return the noisy estimate of my velocity
+    *vx = this->distribution(this->rng);
+    *vy = this->distribution(this->rng);
+}
+
 void Robot::update(int height_limit, int width_limit)
 {
     this->xloc += this->xvel;

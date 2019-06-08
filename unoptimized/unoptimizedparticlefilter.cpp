@@ -27,6 +27,21 @@ UnoptimizedParticleFilter::~UnoptimizedParticleFilter(void)
     // Parent's destructor called automatically
 }
 
+unsigned int UnoptimizedParticleFilter::get_nparticles(void) const
+{
+    return this->nparticles;
+}
+
+int UnoptimizedParticleFilter::get_xpos(unsigned int index) const
+{
+    return this->particles_x[index];
+}
+
+int UnoptimizedParticleFilter::get_ypos(unsigned int index) const
+{
+    return this->particles_y[index];
+}
+
 void UnoptimizedParticleFilter::update(Robot &robot)
 {
     /*
@@ -58,7 +73,10 @@ void UnoptimizedParticleFilter::update(Robot &robot)
    robot.get_xy_estimate(&estimate_x, &estimate_y);
 
    // Assign the weights
-   // TODO
+   for (unsigned int i = 0; i < this->nparticles; i++)
+   {
+       this->particles_weights[i] = this->calculate_likelihood(i, estimate_x, estimate_y);
+   }
 
    // Resample from weights
    // TODO
@@ -70,8 +88,38 @@ void UnoptimizedParticleFilter::update(Robot &robot)
    }
 
    // Move all particles according to our movement model (plus Gaussian noise)
-   // TODO
+   // Also update weights based on how likely the movements were
+   int estimate_vx;
+   int estimate_vy;
+   robot.get_v_estimate(&estimate_vx, &estimate_vy);
+   for (unsigned int i = 0; i < this->nparticles; i++)
+   {
+       static const double sigma = 2.5;
+       this->particles_x[i] += this->gaussian_noise(estimate_vx, sigma);
+       this->particles_y[i] += this->gaussian_noise(estimate_vy, sigma);
+       // TODO: Update weight
+   }
+}
 
-   // Update weights based on how likely the movements were
-   // TODO
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////// PRIVATE FUNCTIONS ///////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+
+double UnoptimizedParticleFilter::calculate_likelihood(unsigned int i, int measured_x, int measured_y) const
+{
+    // TODO
+    /*
+        P(A | B) = P(B | A) * P(A)   /  P(B)
+        P(location | measurement) = P(measurement | location) * P(location) / P(measurement)
+    */
+   return (double)(i * measured_x * measured_y);
+}
+
+double UnoptimizedParticleFilter::gaussian_noise(double mean, double sigma) const
+{
+    // TODO
+    /*
+        (1 / sqrt(2*pi*sigma*sigma)) * exp(-1 * (x - mu)^2 / 2*sigma*sigma)
+    */
+   return (double)(mean * sigma);
 }
