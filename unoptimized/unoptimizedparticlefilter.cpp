@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <random>
+#include <stdlib.h>
 #include "robot.h"
 #include "unoptimizedparticlefilter.h"
 
@@ -9,6 +11,9 @@ UnoptimizedParticleFilter::UnoptimizedParticleFilter(unsigned int nparticles, un
     this->rng = std::mt19937(dev());
     this->height_distribution = std::uniform_int_distribution<std::mt19937::result_type>(0, screen_height);
     this->width_distribution = std::uniform_int_distribution<std::mt19937::result_type>(0, screen_width);
+
+    // Allocate the indices
+    this->indices = (unsigned int *)malloc(sizeof(unsigned int) * nparticles);
 
     // Initialize the particles
     for (unsigned int i = 0; i < this->nparticles; i++)
@@ -25,6 +30,13 @@ UnoptimizedParticleFilter::UnoptimizedParticleFilter(unsigned int nparticles, un
 UnoptimizedParticleFilter::~UnoptimizedParticleFilter(void)
 {
     // Parent's destructor called automatically
+
+    // Free the indices we allocated in our own constructor
+    if (this->indices != nullptr)
+    {
+        free(this->indices);
+        this->indices = nullptr;
+    }
 }
 
 unsigned int UnoptimizedParticleFilter::get_nparticles(void) const
@@ -79,7 +91,7 @@ void UnoptimizedParticleFilter::update(Robot &robot)
    }
 
    // Resample from weights
-   // TODO
+   this->resample_particles();
 
    // Reset all weights
    for (unsigned int i = 0; i < this->nparticles; i++)
@@ -115,11 +127,62 @@ double UnoptimizedParticleFilter::calculate_likelihood(unsigned int i, int measu
    return (double)(i * measured_x * measured_y);
 }
 
-double UnoptimizedParticleFilter::gaussian_noise(double mean, double sigma) const
+double UnoptimizedParticleFilter::gaussian_noise(double mean, double sigma)
 {
-    // TODO
-    /*
-        (1 / sqrt(2*pi*sigma*sigma)) * exp(-1 * (x - mu)^2 / 2*sigma*sigma)
-    */
-   return (double)(mean * sigma);
+   std::normal_distribution<double> gaussian(mean, sigma);
+   return gaussian(this->rng);
+}
+
+void UnoptimizedParticleFilter::resample_particles(void)
+{
+    // Create a distribution I will need
+    auto dist = std::uniform_real_distribution<std::mt19937::result_type>(0.0, 1.0);
+
+    // Create the new particles in vectors
+    std::vector<int> pxs;
+    std::vector<int> pys;
+
+    // Sort the particles by weight
+    this->sort_particles_by_weight_in_place();
+
+    // Align a CMF (cumulative mass function) array, where each bin is the sum of all previous weights
+    std::vector<double> cmf;
+    double acc_prob_mass = 0.0;
+    for (int i = this->nparticles - 1; i >= 0; i--)
+    {
+        acc_prob_mass += this->particles_weights[i];
+        cmf.push_back(acc_prob_mass);
+    }
+
+    // Do a search into the CMF to find the place where our randomly generated probability (0 to 1) fits
+    for (unsigned int i = 0; i < this->nparticles; i++)
+    {
+        double p = dist(this->rng);
+        unsigned int cmf_index = 0;
+        for (unsigned int j = 0; j < this->nparticles; j++)
+        {
+            // Search for where the generated probability belongs
+            if (p >= cmf[j])
+            {
+                cmf_index = j;
+            }
+        }
+        pxs.push_back(this->particles_x[cmf_index]);
+        pys.push_back(this->particles_y[cmf_index]);
+    }
+
+    // Now overwrite the current batch of particles with the new ones
+    for (unsigned int i = 0; i < this->nparticles; i++)
+    {
+        this->particles_x[i] = pxs[i];
+        this->particles_y[i] = pys[i];
+    }
+}
+
+void UnoptimizedParticleFilter::sort_particles_by_weight_in_place(void)
+{
+    // Sort the indices
+    std::sort(this->indices, this->indices + this->nparticles, SortIndices(this->indices));
+
+    // Sort each array according to the sorted indices
 }
