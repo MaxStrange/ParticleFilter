@@ -42,9 +42,9 @@ private:
 class SortIndices
 {
    private:
-     int *arr;
+     unsigned int *arr;
 
    public:
-     SortIndices(int *arr) : arr(arr) {}
-     bool operator()(int i, int j) const { return arr[i] < arr[j]; }
+     SortIndices(unsigned int *arr) : arr(arr) {}
+     bool operator()(unsigned int i, unsigned int j) const { return arr[i] < arr[j]; }
 };

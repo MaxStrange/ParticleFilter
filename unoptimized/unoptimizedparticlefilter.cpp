@@ -1,6 +1,8 @@
 #include <algorithm>
+#include <math.h>
 #include <random>
 #include <stdlib.h>
+#include <string.h>
 #include "robot.h"
 #include "unoptimizedparticlefilter.h"
 
@@ -119,12 +121,38 @@ void UnoptimizedParticleFilter::update(Robot &robot)
 
 double UnoptimizedParticleFilter::calculate_likelihood(unsigned int i, int measured_x, int measured_y) const
 {
-    // TODO
     /*
         P(A | B) = P(B | A) * P(A)   /  P(B)
         P(location | measurement) = P(measurement | location) * P(location) / P(measurement)
+
+        We can actually just use: P(measurement | lcoation) * P(location), discarding the probability of
+        the measurement, since all particles are using the same measurement, and all I care about is
+        the relative probability of each particle, not the true probability.
+
+        So, using:
+        P(measurement | location) = Gaussian(mean=location, std=who knows)
+        P(location) = Uniform probability over the whole range (we don't have a reason to believe one location
+                      is more probable in general than any other).
+
+        Since P(location) is uniform, and therefore doesn't matter per particle, we can also do away with it,
+        leaving just a Gaussian with mean centered on the location.
+
+        So now we need the probability of measured_x and measured_y, given a Gaussian around location.
     */
-   return (double)(i * measured_x * measured_y);
+   double x = (double)this->particles_x[i];
+   double y = (double)this->particles_y[i];
+
+   const double sig1 = 2.5;
+   const double sig2 = 2.5;
+   const double rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
+   double denom = 2.0 * M_PI * sig1 * sig2 * sqrt(1.0 - (rho * rho));
+   double A = ((x - measured_x) * (x - measured_x)) / (sig1 * sig1);
+   double B = ((2.0 * rho * (x - measured_x) * (y - measured_y)) / (sig1 * sig2));
+   double C = ((y - measured_y) * (y - measured_y)) / (sig2 * sig2);
+   double z = A - B + C;
+   double a = (-1.0 * z) / (2.0 * (1.0 - rho * rho));
+
+   return exp(a) / denom;
 }
 
 double UnoptimizedParticleFilter::gaussian_noise(double mean, double sigma)
@@ -136,7 +164,7 @@ double UnoptimizedParticleFilter::gaussian_noise(double mean, double sigma)
 void UnoptimizedParticleFilter::resample_particles(void)
 {
     // Create a distribution I will need
-    auto dist = std::uniform_real_distribution<std::mt19937::result_type>(0.0, 1.0);
+    auto dist = std::uniform_real_distribution<double>(0.0, 1.0);
 
     // Create the new particles in vectors
     std::vector<int> pxs;
@@ -184,5 +212,26 @@ void UnoptimizedParticleFilter::sort_particles_by_weight_in_place(void)
     // Sort the indices
     std::sort(this->indices, this->indices + this->nparticles, SortIndices(this->indices));
 
+    // Make copies of the three arrays (gross)
+    int *xcpy = (int *)malloc(sizeof(int) * this->nparticles);
+    int *ycpy = (int *)malloc(sizeof(int) * this->nparticles);
+    double *wcpy = (double *)malloc(sizeof(double) * this->nparticles);
+    memcpy(xcpy, this->particles_x, sizeof(int) * this->nparticles);
+    memcpy(ycpy, this->particles_y, sizeof(int) * this->nparticles);
+    memcpy(wcpy, this->particles_weights, sizeof(double) * this->nparticles);
+
     // Sort each array according to the sorted indices
+    for (unsigned int i = 0; i < this->nparticles; i++)
+    {
+        this->particles_weights[i] = wcpy[this->indices[i]];
+        this->particles_x[i] = xcpy[this->indices[i]];
+        this->particles_y[i] = ycpy[this->indices[i]];
+    }
+
+   free(xcpy);
+   free(ycpy);
+   free(wcpy);
+   xcpy = nullptr;
+   ycpy = nullptr;
+   wcpy = nullptr;
 }
