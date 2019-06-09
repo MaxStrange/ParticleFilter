@@ -31,6 +31,13 @@ private:
     /** Return a value drawn from the Gaussian distribution parameterized by mean and sigma. */
     double gaussian_noise(double mean, double sigma);
 
+    /**
+     * Return the probability of x and y being drawn from the bivariate distribution described by mean and sigma.
+     * Implementation currently assumes that the bivariate is composed of two (possibly different) Gaussians,
+     * which are *independent*. If they are correlated, this will not work.
+     */
+    double probability_of_value_from_bivariate_gaussian(double x, double y, double mean_x, double mean_y, double sigma_x, double sigma_y) const;
+
     /** Resample the particles from the distribution created from the weights. */
     void resample_particles(void);
 

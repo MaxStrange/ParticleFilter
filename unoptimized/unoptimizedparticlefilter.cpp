@@ -109,9 +109,11 @@ void UnoptimizedParticleFilter::update(Robot &robot)
    for (unsigned int i = 0; i < this->nparticles; i++)
    {
        static const double sigma = 2.5;
-       this->particles_x[i] += this->gaussian_noise(estimate_vx, sigma);
-       this->particles_y[i] += this->gaussian_noise(estimate_vy, sigma);
-       // TODO: Update weight
+       double vx = this->gaussian_noise(estimate_vx, sigma);
+       double vy = this->gaussian_noise(estimate_vy, sigma);
+       this->particles_x[i] += vx;
+       this->particles_y[i] += vy;
+       this->particles_weights[i] = this->probability_of_value_from_bivariate_gaussian(vx, vy, estimate_vx, estimate_vy, sigma, sigma);
    }
 }
 
@@ -139,26 +141,29 @@ double UnoptimizedParticleFilter::calculate_likelihood(unsigned int i, int measu
 
         So now we need the probability of measured_x and measured_y, given a Gaussian around location.
     */
-   double x = (double)this->particles_x[i];
-   double y = (double)this->particles_y[i];
+    double x = (double)this->particles_x[i];
+    double y = (double)this->particles_y[i];
 
-   const double sig1 = 2.5;
-   const double sig2 = 2.5;
-   const double rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
-   double denom = 2.0 * M_PI * sig1 * sig2 * sqrt(1.0 - (rho * rho));
-   double A = ((x - measured_x) * (x - measured_x)) / (sig1 * sig1);
-   double B = ((2.0 * rho * (x - measured_x) * (y - measured_y)) / (sig1 * sig2));
-   double C = ((y - measured_y) * (y - measured_y)) / (sig2 * sig2);
-   double z = A - B + C;
-   double a = (-1.0 * z) / (2.0 * (1.0 - rho * rho));
-
-   return exp(a) / denom;
+    return this->probability_of_value_from_bivariate_gaussian(x, y, measured_x, measured_y, 2.5, 2.5);
 }
 
 double UnoptimizedParticleFilter::gaussian_noise(double mean, double sigma)
 {
    std::normal_distribution<double> gaussian(mean, sigma);
    return gaussian(this->rng);
+}
+
+double UnoptimizedParticleFilter::probability_of_value_from_bivariate_gaussian(double x, double y, double mean_x, double mean_y, double sigma_x, double sigma_y) const
+{
+   const double rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
+   double denom = 2.0 * M_PI * sigma_x * sigma_y * sqrt(1.0 - (rho * rho));
+   double A = ((x - mean_x) * (x - mean_x)) / (sigma_x * sigma_x);
+   double B = ((2.0 * rho * (x - mean_x) * (y - mean_y)) / (sigma_x * sigma_y));
+   double C = ((y - mean_y) * (y - mean_y)) / (sigma_y * sigma_y);
+   double z = A - B + C;
+   double a = (-1.0 * z) / (2.0 * (1.0 - rho * rho));
+
+   return exp(a) / denom;
 }
 
 void UnoptimizedParticleFilter::resample_particles(void)
