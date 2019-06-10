@@ -12,9 +12,9 @@ const uint8_t ROBOT_RED      = 0x00;
 const uint8_t ROBOT_GREEN    = 0x00;
 const uint8_t ROBOT_BLUE     = 0xFF;
 const uint8_t ROBOT_ALPHA    = 0xFF;
-const uint8_t PARTICLE_RED   = 0x10;
+const uint8_t PARTICLE_RED   = 0x50;
 const uint8_t PARTICLE_GREEN = 0xFF;
-const uint8_t PARTICLE_BLUE  = 0xFF;
+const uint8_t PARTICLE_BLUE  = 0x40;
 const uint8_t PARTICLE_ALPHA = 0x00;
 
 Graphics::Graphics(void)

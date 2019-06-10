@@ -56,7 +56,7 @@ int UnoptimizedParticleFilter::get_ypos(unsigned int index) const
     return this->particles_y[index];
 }
 
-void UnoptimizedParticleFilter::update(Robot &robot)
+void UnoptimizedParticleFilter::update_part1(Robot &robot)
 {
     /*
         Particle filter algorithm is like this:
@@ -92,6 +92,11 @@ void UnoptimizedParticleFilter::update(Robot &robot)
        this->particles_weights[i] = this->calculate_likelihood(i, estimate_x, estimate_y);
    }
 
+   // Take a break now to update the graphics in the main loop
+}
+
+void UnoptimizedParticleFilter::update_part2(Robot &robot)
+{
    // Resample from weights
    this->resample_particles();
 
@@ -153,6 +158,23 @@ double UnoptimizedParticleFilter::gaussian_noise(double mean, double sigma)
    return gaussian(this->rng);
 }
 
+void UnoptimizedParticleFilter::normalize_weights(void)
+{
+    double sum = 0.0;
+    for (unsigned int i = 0; i < this->nparticles; i++)
+    {
+        sum += this->particles_weights[i];
+    }
+
+    if (sum > 0.0)
+    {
+        for (unsigned int i = 0; i < this->nparticles; i++)
+        {
+            this->particles_weights[i] /= sum;
+        }
+    }
+}
+
 double UnoptimizedParticleFilter::probability_of_value_from_bivariate_gaussian(double x, double y, double mean_x, double mean_y, double sigma_x, double sigma_y) const
 {
    const double rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
@@ -175,6 +197,9 @@ void UnoptimizedParticleFilter::resample_particles(void)
     std::vector<int> pxs;
     std::vector<int> pys;
 
+    // Normalize the weights so that each one is between 0 and 1
+    this->normalize_weights();
+
     // Sort the particles by weight
     this->sort_particles_by_weight_in_place();
 
@@ -191,7 +216,7 @@ void UnoptimizedParticleFilter::resample_particles(void)
     for (unsigned int i = 0; i < this->nparticles; i++)
     {
         double p = dist(this->rng);
-        unsigned int cmf_index = 0;
+        int cmf_index = -1;
         for (unsigned int j = 0; j < this->nparticles; j++)
         {
             // Search for where the generated probability belongs
@@ -200,8 +225,18 @@ void UnoptimizedParticleFilter::resample_particles(void)
                 cmf_index = j;
             }
         }
-        pxs.push_back(this->particles_x[cmf_index]);
-        pys.push_back(this->particles_y[cmf_index]);
+
+        if (cmf_index >= 0)
+        {
+            pxs.push_back(this->particles_x[cmf_index]);
+            pys.push_back(this->particles_y[cmf_index]);
+        }
+        else
+        {
+            // Probabilities are all zero. Resample from uniform.
+            pxs.push_back(this->width_distribution(this->rng));
+            pys.push_back(this->height_distribution(this->rng));
+        }
     }
 
     // Now overwrite the current batch of particles with the new ones

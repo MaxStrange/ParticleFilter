@@ -15,8 +15,12 @@ public:
     virtual int get_xpos(unsigned int index) const = 0;
     virtual int get_ypos(unsigned int index) const = 0;
 
-    /** Update the particle filter. Call this every time we get new measurements from the robot. */
-    virtual void update(Robot &robot) = 0;
+    /**
+     * Update the particle filter. Call this every time we get new measurements from the robot.
+     * Then display, then call part2.
+     */
+    virtual void update_part1(Robot &robot) = 0;
+    virtual void update_part2(Robot &robot) = 0;
 
 protected:
     /** Particle's X locations. Malloc'd array. */

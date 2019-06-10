@@ -17,7 +17,8 @@ public:
     int get_ypos(unsigned int index) const;
 
     /** Override from parent class */
-    void update(Robot &robot);
+    void update_part1(Robot &robot);
+    void update_part2(Robot &robot);
 
 private:
     std::mt19937 rng;
@@ -30,6 +31,9 @@ private:
 
     /** Return a value drawn from the Gaussian distribution parameterized by mean and sigma. */
     double gaussian_noise(double mean, double sigma);
+
+    /** Normalize the weights to between 0 and 1. */
+    void normalize_weights(void);
 
     /**
      * Return the probability of x and y being drawn from the bivariate distribution described by mean and sigma.
