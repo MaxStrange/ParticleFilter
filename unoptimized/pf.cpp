@@ -24,7 +24,6 @@ static int parse_args(int argc, const char **argv, unsigned int *nparticles)
 {
     if (argc == 1)
     {
-        std::cout << "Need nparticles as an argument." << std::endl;
         return -1;
     }
 

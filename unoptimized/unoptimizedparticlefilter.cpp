@@ -1,10 +1,15 @@
 #include <algorithm>
+#include <assert.h>
 #include <math.h>
 #include <random>
 #include <stdlib.h>
 #include <string.h>
+#include <iostream>
 #include "robot.h"
 #include "unoptimizedparticlefilter.h"
+
+#define DEBUG 1
+#define DEBUG_PRINTF(fmt, ...) do { if (DEBUG) fprintf(stderr, fmt, __VA_ARGS__); } while (0)
 
 UnoptimizedParticleFilter::UnoptimizedParticleFilter(unsigned int nparticles, unsigned int screen_height, unsigned int screen_width)
     : ParticleFilter(nparticles)
@@ -26,6 +31,9 @@ UnoptimizedParticleFilter::UnoptimizedParticleFilter(unsigned int nparticles, un
         this->particles_x[i] = x;
         this->particles_y[i] = y;
         this->particles_weights[i] = 0.0;
+
+        assert(x <= (int)screen_width);
+        assert(y <= (int)screen_height);
     }
 }
 
@@ -81,45 +89,49 @@ void UnoptimizedParticleFilter::update_part1(Robot &robot)
         7. Repeat from step 2.
     */
 
-   // Get measurements of robot's position from its sensors
-   int estimate_x;
-   int estimate_y;
-   robot.get_xy_estimate(&estimate_x, &estimate_y);
+    // Get measurements of robot's position from its sensors
+    int estimate_x;
+    int estimate_y;
+    robot.get_xy_estimate(&estimate_x, &estimate_y);
 
-   // Assign the weights
-   for (unsigned int i = 0; i < this->nparticles; i++)
-   {
-       this->particles_weights[i] = this->calculate_likelihood(i, estimate_x, estimate_y);
-   }
+    // Assign the weights
+    double accumulated = 0.0;
+    for (unsigned int i = 0; i < this->nparticles; i++)
+    {
+        this->particles_weights[i] = this->calculate_likelihood(i, estimate_x, estimate_y);
+        DEBUG_PRINTF("Likelihood of (%d, %d) given measured (%d, %d): %.4f\n", this->particles_x[i], this->particles_y[i], estimate_x, estimate_y, this->particles_weights[i]);
+        accumulated += this->particles_weights[i];
+    }
+    assert(accumulated > 0.0);
 
-   // Take a break now to update the graphics in the main loop
+    // Take a break now to update the graphics in the main loop
 }
 
 void UnoptimizedParticleFilter::update_part2(Robot &robot)
 {
-   // Resample from weights
-   this->resample_particles();
+    // Resample from weights
+    this->resample_particles();
 
-   // Reset all weights
-   for (unsigned int i = 0; i < this->nparticles; i++)
-   {
-       this->particles_weights[i] = 0.0;
-   }
+    // Reset all weights
+    for (unsigned int i = 0; i < this->nparticles; i++)
+    {
+    this->particles_weights[i] = 0.0;
+    }
 
-   // Move all particles according to our movement model (plus Gaussian noise)
-   // Also update weights based on how likely the movements were
-   int estimate_vx;
-   int estimate_vy;
-   robot.get_v_estimate(&estimate_vx, &estimate_vy);
-   for (unsigned int i = 0; i < this->nparticles; i++)
-   {
-       static const double sigma = 2.5;
-       double vx = this->gaussian_noise(estimate_vx, sigma);
-       double vy = this->gaussian_noise(estimate_vy, sigma);
-       this->particles_x[i] += vx;
-       this->particles_y[i] += vy;
-       this->particles_weights[i] = this->probability_of_value_from_bivariate_gaussian(vx, vy, estimate_vx, estimate_vy, sigma, sigma);
-   }
+    // Move all particles according to our movement model (plus Gaussian noise)
+    // Also update weights based on how likely the movements were
+    int estimate_vx;
+    int estimate_vy;
+    robot.get_v_estimate(&estimate_vx, &estimate_vy);
+    for (unsigned int i = 0; i < this->nparticles; i++)
+    {
+        static const double sigma = 2.5;
+        double vx = this->gaussian_noise(estimate_vx, sigma);
+        double vy = this->gaussian_noise(estimate_vy, sigma);
+        this->particles_x[i] += vx;
+        this->particles_y[i] += vy;
+        this->particles_weights[i] = this->probability_of_value_from_bivariate_gaussian(vx, vy, estimate_vx, estimate_vy, sigma, sigma);
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -154,8 +166,8 @@ double UnoptimizedParticleFilter::calculate_likelihood(unsigned int i, int measu
 
 double UnoptimizedParticleFilter::gaussian_noise(double mean, double sigma)
 {
-   std::normal_distribution<double> gaussian(mean, sigma);
-   return gaussian(this->rng);
+    std::normal_distribution<double> gaussian(mean, sigma);
+    return gaussian(this->rng);
 }
 
 void UnoptimizedParticleFilter::normalize_weights(void)
@@ -177,15 +189,17 @@ void UnoptimizedParticleFilter::normalize_weights(void)
 
 double UnoptimizedParticleFilter::probability_of_value_from_bivariate_gaussian(double x, double y, double mean_x, double mean_y, double sigma_x, double sigma_y) const
 {
-   const double rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
-   double denom = 2.0 * M_PI * sigma_x * sigma_y * sqrt(1.0 - (rho * rho));
-   double A = ((x - mean_x) * (x - mean_x)) / (sigma_x * sigma_x);
-   double B = ((2.0 * rho * (x - mean_x) * (y - mean_y)) / (sigma_x * sigma_y));
-   double C = ((y - mean_y) * (y - mean_y)) / (sigma_y * sigma_y);
-   double z = A - B + C;
-   double a = (-1.0 * z) / (2.0 * (1.0 - rho * rho));
+    const double rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
+    double denom = 2.0 * M_PI * sigma_x * sigma_y * sqrt(1.0 - (rho * rho));
+    double A = ((x - mean_x) * (x - mean_x)) / (sigma_x * sigma_x);
+    double B = ((2.0 * rho * (x - mean_x) * (y - mean_y)) / (sigma_x * sigma_y));
+    double C = ((y - mean_y) * (y - mean_y)) / (sigma_y * sigma_y);
+    A /= 1000.0;  // For numerical stability
+    C /= 1000.0;  // Ditto
+    double z = A - B + C;
+    double a = (-1.0 * z) / (2.0 * (1.0 - rho * rho));
 
-   return exp(a) / denom;
+    return exp(a) / denom;
 }
 
 void UnoptimizedParticleFilter::resample_particles(void)
