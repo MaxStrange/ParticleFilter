@@ -215,45 +215,32 @@ void UnoptimizedParticleFilter::resample_particles(void)
     // Normalize the weights so that each one is between 0 and 1
     this->normalize_weights();
 
-    printf("Before sorting: ");
-    for (unsigned int i = 0; i < this->nparticles; i++)
-    {
-        printf("(%d, %d, %f) ", this->particles_x[i], this->particles_y[i], this->particles_weights[i]);
-    }
-    printf("\n");
-
     // Sort the particles by weight (in reverse - heaviest at the front of the array)
     this->sort_particles_by_weight_in_place();
-
-    printf("After sorting: ");
-    for (unsigned int i = 0; i < this->nparticles; i++)
-    {
-        printf("(%d, %d, %f) ", this->particles_x[i], this->particles_y[i], this->particles_weights[i]);
-    }
-    printf("\n");
 
     // Align a CMF (cumulative mass function) array, where each bin is the sum of all previous weights
     std::vector<double> cmf;
     double acc_prob_mass = 0.0;
-    for (unsigned int i = 0; i < this->nparticles; i--)
+    for (unsigned int i = 0; i < this->nparticles; i++)
     {
         acc_prob_mass += this->particles_weights[i];
         cmf.push_back(acc_prob_mass);
     }
 
-    exit(0);
-
     // Do a search into the CMF to find the place where our randomly generated probability (0 to 1) fits
     for (unsigned int i = 0; i < this->nparticles; i++)
     {
         double p = dist(this->rng);
+        assert((p <= 1.0) && (p >= 0.0));
+
         int cmf_index = -1;
         for (unsigned int j = 0; j < this->nparticles; j++)
         {
             // Search for where the generated probability belongs
-            if (p >= cmf[j])
+            if (p <= cmf[j])
             {
                 cmf_index = j;
+                break;
             }
         }
 

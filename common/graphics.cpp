@@ -168,10 +168,6 @@ int Graphics::update_image(const Robot &robot, const ParticleFilter &pf)
         goto fail;
     }
 
-    /* Paint the robot */
-    SDL_SetRenderDrawColor(this->renderer, ROBOT_RED, ROBOT_GREEN, ROBOT_BLUE, ROBOT_ALPHA);
-    SDL_RenderFillRect(this->renderer, &robotrect);
-
     /* Paint the particles */
     SDL_SetRenderDrawColor(this->renderer, PARTICLE_RED, PARTICLE_GREEN, PARTICLE_BLUE, PARTICLE_ALPHA);
     for (unsigned int i = 0; i < pf.get_nparticles(); i++)
@@ -182,6 +178,10 @@ int Graphics::update_image(const Robot &robot, const ParticleFilter &pf)
         particle.y = y;
         SDL_RenderFillRect(this->renderer, &particle);
     }
+
+    /* Paint the robot */
+    SDL_SetRenderDrawColor(this->renderer, ROBOT_RED, ROBOT_GREEN, ROBOT_BLUE, ROBOT_ALPHA);
+    SDL_RenderFillRect(this->renderer, &robotrect);
 
     /* Update the screen */
     SDL_RenderPresent(this->renderer);
