@@ -31,6 +31,7 @@ UnoptimizedParticleFilter::UnoptimizedParticleFilter(unsigned int nparticles, un
         this->particles_x[i] = x;
         this->particles_y[i] = y;
         this->particles_weights[i] = 0.0;
+        this->indices[i] = i;
 
         assert(x <= (int)screen_width);
         assert(y <= (int)screen_height);
@@ -99,7 +100,6 @@ void UnoptimizedParticleFilter::update_part1(Robot &robot)
     for (unsigned int i = 0; i < this->nparticles; i++)
     {
         this->particles_weights[i] = this->calculate_likelihood(i, estimate_x, estimate_y);
-        DEBUG_PRINTF("Likelihood of (%d, %d) given measured (%d, %d): %.4f\n", this->particles_x[i], this->particles_y[i], estimate_x, estimate_y, this->particles_weights[i]);
         accumulated += this->particles_weights[i];
     }
     assert(accumulated > 0.0);
@@ -115,7 +115,7 @@ void UnoptimizedParticleFilter::update_part2(Robot &robot)
     // Reset all weights
     for (unsigned int i = 0; i < this->nparticles; i++)
     {
-    this->particles_weights[i] = 0.0;
+        this->particles_weights[i] = 0.0;
     }
 
     // Move all particles according to our movement model (plus Gaussian noise)
@@ -183,6 +183,7 @@ void UnoptimizedParticleFilter::normalize_weights(void)
         for (unsigned int i = 0; i < this->nparticles; i++)
         {
             this->particles_weights[i] /= sum;
+            assert((this->particles_weights[i] >= 0.0) && (this->particles_weights[i] <= 1.0));
         }
     }
 }
@@ -214,17 +215,33 @@ void UnoptimizedParticleFilter::resample_particles(void)
     // Normalize the weights so that each one is between 0 and 1
     this->normalize_weights();
 
-    // Sort the particles by weight
+    printf("Before sorting: ");
+    for (unsigned int i = 0; i < this->nparticles; i++)
+    {
+        printf("(%d, %d, %f) ", this->particles_x[i], this->particles_y[i], this->particles_weights[i]);
+    }
+    printf("\n");
+
+    // Sort the particles by weight (in reverse - heaviest at the front of the array)
     this->sort_particles_by_weight_in_place();
+
+    printf("After sorting: ");
+    for (unsigned int i = 0; i < this->nparticles; i++)
+    {
+        printf("(%d, %d, %f) ", this->particles_x[i], this->particles_y[i], this->particles_weights[i]);
+    }
+    printf("\n");
 
     // Align a CMF (cumulative mass function) array, where each bin is the sum of all previous weights
     std::vector<double> cmf;
     double acc_prob_mass = 0.0;
-    for (int i = this->nparticles - 1; i >= 0; i--)
+    for (unsigned int i = 0; i < this->nparticles; i--)
     {
         acc_prob_mass += this->particles_weights[i];
         cmf.push_back(acc_prob_mass);
     }
+
+    exit(0);
 
     // Do a search into the CMF to find the place where our randomly generated probability (0 to 1) fits
     for (unsigned int i = 0; i < this->nparticles; i++)
@@ -264,7 +281,7 @@ void UnoptimizedParticleFilter::resample_particles(void)
 void UnoptimizedParticleFilter::sort_particles_by_weight_in_place(void)
 {
     // Sort the indices
-    std::sort(this->indices, this->indices + this->nparticles, SortIndices(this->indices));
+    std::sort(this->indices, this->indices + this->nparticles, SortIndices(this->particles_weights));
 
     // Make copies of the three arrays (gross)
     int *xcpy = (int *)malloc(sizeof(int) * this->nparticles);

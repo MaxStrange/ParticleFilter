@@ -53,9 +53,9 @@ private:
 class SortIndices
 {
    private:
-     unsigned int *arr;
+     double *weights;
 
    public:
-     SortIndices(unsigned int *arr) : arr(arr) {}
-     bool operator()(unsigned int i, unsigned int j) const { return arr[i] < arr[j]; }
+     SortIndices(double *weights) : weights(weights) {}
+     bool operator()(unsigned int i, unsigned int j) const { return weights[i] > weights[j]; }
 };
