@@ -1,6 +1,9 @@
 #include <iostream>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
+#ifdef _WIN32
+    #include "../SDL/include/SDL.h"
+#else
+    #include <SDL2/SDL.h>
+#endif
 #include "graphics.h"
 
 /** Screen dimensions constants */
@@ -81,12 +84,6 @@ int Graphics::init(void)
         goto fail;
     }
 
-    if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG))
-    {
-        err = __LINE__;
-        goto fail;
-    }
-
 fail:
     return err;
 }
@@ -98,7 +95,6 @@ int Graphics::exit(void)
     this->renderer = nullptr;
     this->window = nullptr;
 
-    IMG_Quit();
     SDL_Quit();
 
     return 0;

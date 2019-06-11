@@ -7,8 +7,8 @@
 
 Robot::Robot(void)
 {
-    this->xloc = 0;
-    this->yloc = 0;
+    this->xloc = 250;
+    this->yloc = 250;
     this->xvel = 0;
     this->yvel = 0;
     this->height = 10;

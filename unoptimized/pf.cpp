@@ -20,7 +20,7 @@
         }\
     } while(0)
 
-static int parse_args(int argc, const char **argv, unsigned int *nparticles)
+static int parse_args(int argc, char *argv[], unsigned int *nparticles)
 {
     if (argc == 1)
     {
@@ -40,7 +40,7 @@ static int parse_args(int argc, const char **argv, unsigned int *nparticles)
     }
 }
 
-int main(int argc, const char **argv)
+int main(int argc, char *argv[])
 {
     int err;
     Graphics gfx;
