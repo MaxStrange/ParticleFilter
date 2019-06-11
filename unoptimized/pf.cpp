@@ -4,7 +4,6 @@
  */
 #include <iostream>
 #include <string>
-#include <unistd.h>
 #include "graphics.h"
 #include "robot.h"
 #include "unoptimizedparticlefilter.h"
