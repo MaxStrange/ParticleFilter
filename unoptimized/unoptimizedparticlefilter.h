@@ -27,10 +27,10 @@ private:
     unsigned int *indices;
 
     /** Calculates P(position | measurement) for the particle at index i. */
-    double calculate_likelihood(unsigned int i, int measured_x, int measured_y) const;
+    float calculate_likelihood(unsigned int i, int measured_x, int measured_y) const;
 
     /** Return a value drawn from the Gaussian distribution parameterized by mean and sigma. */
-    double gaussian_noise(double mean, double sigma);
+    float gaussian_noise(float mean, float sigma);
 
     /** Normalize the weights to between 0 and 1. */
     void normalize_weights(void);
@@ -40,7 +40,7 @@ private:
      * Implementation currently assumes that the bivariate is composed of two (possibly different) Gaussians,
      * which are *independent*. If they are correlated, this will not work.
      */
-    double probability_of_value_from_bivariate_gaussian(double x, double y, double mean_x, double mean_y, double sigma_x, double sigma_y) const;
+    float probability_of_value_from_bivariate_gaussian(float x, float y, float mean_x, float mean_y, float sigma_x, float sigma_y) const;
 
     /** Resample the particles from the distribution created from the weights. */
     void resample_particles(void);
@@ -53,9 +53,9 @@ private:
 class SortIndices
 {
    private:
-     double *weights;
+     float *weights;
 
    public:
-     SortIndices(double *weights) : weights(weights) {}
+     SortIndices(float *weights) : weights(weights) {}
      bool operator()(unsigned int i, unsigned int j) const { return weights[i] > weights[j]; }
 };

@@ -54,6 +54,9 @@ int main(int argc, char *argv[])
     err = gfx.init();
     CHECK_EXIT(err, "SDL could not initialize!", gfx);
 
+    err = pf.init();
+    CHECK_EXIT(err, "CUDA could not initialize!", gfx);
+
     bool done = false;
     while (!done)
     {

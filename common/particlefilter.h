@@ -30,7 +30,7 @@ protected:
     int *particles_y;
 
     /** Particle's weights. Malloc'd array. */
-    double *particles_weights;
+    float *particles_weights;
 
     /** Number of particles in the filter. */
     unsigned int nparticles;

@@ -6,7 +6,7 @@ ParticleFilter::ParticleFilter(unsigned int nparticles)
 {
     this->particles_x = (int *)malloc(sizeof(int) * nparticles);
     this->particles_y = (int *)malloc(sizeof(int) * nparticles);
-    this->particles_weights = (double *)malloc(sizeof(double) * nparticles);
+    this->particles_weights = (float *)malloc(sizeof(float) * nparticles);
     this->nparticles = nparticles;
 }
 

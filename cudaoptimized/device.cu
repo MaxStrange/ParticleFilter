@@ -1,74 +1,140 @@
 #include <algorithm>
 #include <assert.h>
+#include <cuda_runtime.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <random>
 #include <vector>
 #include "device.h"
 
-static double gaussian_noise(double mean, double sigma, std::mt19937 &rng)
+static float gaussian_noise(float mean, float sigma, std::mt19937 &rng)
 {
-    std::normal_distribution<double> gaussian(mean, sigma);
+    std::normal_distribution<float> gaussian(mean, sigma);
     return gaussian(rng);
 }
 
-static double probability_of_value_from_bivariate_gaussian(double x, double y, double mean_x, double mean_y, double sigma_x, double sigma_y)
+static float probability_of_value_from_bivariate_gaussian(float x, float y, float mean_x, float mean_y, float sigma_x, float sigma_y)
 {
-    const double rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
-    double denom = 2.0 * M_PI * sigma_x * sigma_y * sqrt(1.0 - (rho * rho));
-    double A = ((x - mean_x) * (x - mean_x)) / (sigma_x * sigma_x);
-    double B = ((2.0 * rho * (x - mean_x) * (y - mean_y)) / (sigma_x * sigma_y));
-    double C = ((y - mean_y) * (y - mean_y)) / (sigma_y * sigma_y);
+    const float rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
+    float denom = 2.0 * M_PI * sigma_x * sigma_y * sqrt(1.0 - (rho * rho));
+    float A = ((x - mean_x) * (x - mean_x)) / (sigma_x * sigma_x);
+    float B = ((2.0 * rho * (x - mean_x) * (y - mean_y)) / (sigma_x * sigma_y));
+    float C = ((y - mean_y) * (y - mean_y)) / (sigma_y * sigma_y);
     A /= 1000.0;  // For numerical stability
     C /= 1000.0;  // Ditto
-    double z = A - B + C;
-    double a = (-1.0 * z) / (2.0 * (1.0 - rho * rho));
+    float z = A - B + C;
+    float a = (-1.0 * z) / (2.0 * (1.0 - rho * rho));
 
     return exp(a) / denom;
 }
 
-void device_calculate_likelihood(const int *particles_x, const int *particles_y, int estimate_x, int estimate_y, double *weights, unsigned int nparticles)
+__global__ void kernel_calculate_likelihood(int *particles_x, int *particles_y, float *weights, unsigned int nparticles, float estimate_x, float estimate_y)
 {
-    /*
-        P(A | B) = P(B | A) * P(A)   /  P(B)
-        P(location | measurement) = P(measurement | location) * P(location) / P(measurement)
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-        We can actually just use: P(measurement | lcoation) * P(location), discarding the probability of
-        the measurement, since all particles are using the same measurement, and all I care about is
-        the relative probability of each particle, not the true probability.
-
-        So, using:
-        P(measurement | location) = Gaussian(mean=location, std=who knows)
-        P(location) = Uniform probability over the whole range (we don't have a reason to believe one location
-                      is more probable in general than any other).
-
-        Since P(location) is uniform, and therefore doesn't matter per particle, we can also do away with it,
-        leaving just a Gaussian with mean centered on the location.
-
-        So now we need the probability of measured_x and measured_y, given a Gaussian around location.
-    */
-    for (unsigned int i = 0; i < nparticles; i++)
+    if (index < nparticles)
     {
-        double x = (double)particles_x[i];
-        double y = (double)particles_y[i];
-        weights[i] = probability_of_value_from_bivariate_gaussian(x, y, estimate_x, estimate_y, 2.5, 2.5);
+        float x = particles_x[index];
+        float y = particles_y[index];
+
+        const float sigma_x = 2.5;
+        const float sigma_y = 2.5;
+        float mean_x = estimate_x;
+        float mean_y = estimate_y;
+
+        // Compute the probability of getting this x,y combo from a distribution centered at estimate_x, estimte_y.
+        const float rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
+        float denom = 2.0 * M_PI * sigma_x * sigma_y * sqrt(1.0 - (rho * rho));
+        float A = ((x - mean_x) * (x - mean_x)) / (sigma_x * sigma_x);
+        float B = ((2.0 * rho * (x - mean_x) * (y - mean_y)) / (sigma_x * sigma_y));
+        float C = ((y - mean_y) * (y - mean_y)) / (sigma_y * sigma_y);
+        A /= 1000.0;  // For numerical stability
+        C /= 1000.0;  // Ditto
+        float z = A - B + C;
+        float a = (-1.0 * z) / (2.0 * (1.0 - rho * rho));
+
+        float prob = exp(a) / denom;
+
+        weights[index] = prob;
     }
 }
 
-static void move_particles(int estimated_vx, int estimated_vy, unsigned int nparticles, int *particles_x, int *particles_y, double *particles_weights, std::mt19937 &rng)
+int device_calculate_likelihood(const int *particles_x, const int *particles_y, int estimate_x, int estimate_y, float *weights, unsigned int nparticles)
+{
+    cudaError_t err;
+    int *dev_particles_x = nullptr;
+    int *dev_particles_y = nullptr;
+    float *dev_weights = nullptr;
+
+    unsigned int i;
+
+#define CHECK_CUDA_ERR(err) do { if (err != cudaSuccess) { err = (cudaError_t)__LINE__; goto fail; }} while (0)
+
+    /* Malloc all the device memory we need */
+    err = cudaMalloc(&dev_particles_x, nparticles * sizeof(int));
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMalloc(&dev_particles_y, nparticles * sizeof(int));
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMalloc(&dev_weights, nparticles * sizeof(float));
+    CHECK_CUDA_ERR(err);
+
+    /* Copy arrays onto device */
+    err = cudaMemcpy(dev_particles_x, particles_x, nparticles * sizeof(int), cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMemcpy(dev_particles_y, particles_y, nparticles * sizeof(int), cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMemcpy(dev_weights, weights, nparticles * sizeof(float), cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERR(err);
+
+    /* Call the kernel */
+    //kernel_calculate_likelihood<<<ceil(nparticles / 524.0), 524>>>(dev_particles_x, dev_particles_y, dev_weights, estimate_x, estimate_y, nparticles);
+    for (i = 0; i < nparticles; i++)
+    {
+        float x = (float)particles_x[i];
+        float y = (float)particles_y[i];
+
+        weights[i] = probability_of_value_from_bivariate_gaussian(x, y, estimate_x, estimate_y, 2.5, 2.5);
+    }
+
+    /* Copy array back onto host */
+    err = cudaMemcpy(weights, dev_weights, nparticles * sizeof(float), cudaMemcpyDeviceToHost);
+    CHECK_CUDA_ERR(err);
+
+    /* Deallocate the device arrays */
+    err = cudaFree(dev_particles_x);
+    CHECK_CUDA_ERR(err);
+
+    err = cudaFree(dev_particles_y);
+    CHECK_CUDA_ERR(err);
+
+    err = cudaFree(dev_weights);
+    CHECK_CUDA_ERR(err);
+
+#undef CHECK_CUDA_ERR
+
+fail:
+    assert(err == cudaSuccess);
+    return (int)err;
+}
+
+static void move_particles(int estimated_vx, int estimated_vy, unsigned int nparticles, int *particles_x, int *particles_y, float *particles_weights, std::mt19937 &rng)
 {
     for (unsigned int i = 0; i < nparticles; i++)
     {
-        static const double sigma = 2.5;
-        double vx = gaussian_noise(estimated_vx, sigma, rng);
-        double vy = gaussian_noise(estimated_vy, sigma, rng);
+        static const float sigma = 2.5;
+        float vx = gaussian_noise(estimated_vx, sigma, rng);
+        float vy = gaussian_noise(estimated_vy, sigma, rng);
         particles_x[i] += vx;
         particles_y[i] += vy;
         particles_weights[i] = probability_of_value_from_bivariate_gaussian(vx, vy, estimated_vx, estimated_vy, sigma, sigma);
     }
 }
 
-static void sort_particles_by_weight_in_place(unsigned int *indices, unsigned int nparticles, double *particles_weights, int *particles_x, int *particles_y)
+static void sort_particles_by_weight_in_place(unsigned int *indices, unsigned int nparticles, float *particles_weights, int *particles_x, int *particles_y)
 {
     // Sort the indices
     std::sort(indices, indices + nparticles, SortIndices(particles_weights));
@@ -76,10 +142,10 @@ static void sort_particles_by_weight_in_place(unsigned int *indices, unsigned in
     // Make copies of the three arrays (gross)
     int *xcpy = (int *)malloc(sizeof(int) * nparticles);
     int *ycpy = (int *)malloc(sizeof(int) * nparticles);
-    double *wcpy = (double *)malloc(sizeof(double) * nparticles);
+    float *wcpy = (float *)malloc(sizeof(float) * nparticles);
     memcpy(xcpy, particles_x, sizeof(int) * nparticles);
     memcpy(ycpy, particles_y, sizeof(int) * nparticles);
-    memcpy(wcpy, particles_weights, sizeof(double) * nparticles);
+    memcpy(wcpy, particles_weights, sizeof(float) * nparticles);
 
     // Sort each array according to the sorted indices
     for (unsigned int i = 0; i < nparticles; i++)
@@ -97,9 +163,9 @@ static void sort_particles_by_weight_in_place(unsigned int *indices, unsigned in
    wcpy = nullptr;
 }
 
-static void normalize_weights(unsigned int nparticles, double *particles_weights)
+static void normalize_weights(unsigned int nparticles, float *particles_weights)
 {
-    double sum = 0.0;
+    float sum = 0.0;
     for (unsigned int i = 0; i < nparticles; i++)
     {
         sum += particles_weights[i];
@@ -115,10 +181,10 @@ static void normalize_weights(unsigned int nparticles, double *particles_weights
     }
 }
 
-static void resample_particles(unsigned int nparticles, double *particles_weights, std::mt19937 &rng, unsigned int *indices, int *particles_x, int *particles_y)
+static void resample_particles(unsigned int nparticles, float *particles_weights, std::mt19937 &rng, unsigned int *indices, int *particles_x, int *particles_y)
 {
     // Create a distribution I will need
-    auto dist = std::uniform_real_distribution<double>(0.0, 1.0);
+    auto dist = std::uniform_real_distribution<float>(0.0, 1.0);
     std::uniform_int_distribution<std::mt19937::result_type> height_distribution;
     std::uniform_int_distribution<std::mt19937::result_type> width_distribution;
 
@@ -133,8 +199,8 @@ static void resample_particles(unsigned int nparticles, double *particles_weight
     sort_particles_by_weight_in_place(indices, nparticles, particles_weights, particles_x, particles_y);
 
     // Align a CMF (cumulative mass function) array, where each bin is the sum of all previous weights
-    std::vector<double> cmf;
-    double acc_prob_mass = 0.0;
+    std::vector<float> cmf;
+    float acc_prob_mass = 0.0;
     for (unsigned int i = 0; i < nparticles; i++)
     {
         acc_prob_mass += particles_weights[i];
@@ -144,7 +210,7 @@ static void resample_particles(unsigned int nparticles, double *particles_weight
     // Do a search into the CMF to find the place where our randomly generated probability (0 to 1) fits
     for (unsigned int i = 0; i < nparticles; i++)
     {
-        double p = dist(rng);
+        float p = dist(rng);
         assert((p <= 1.0) && (p >= 0.0));
 
         int cmf_index = -1;
@@ -179,7 +245,7 @@ static void resample_particles(unsigned int nparticles, double *particles_weight
     }
 }
 
-void device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int nparticles, int *particles_x, int *particles_y, double *particles_weights, std::mt19937 &rng, unsigned int *indices)
+int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int nparticles, int *particles_x, int *particles_y, float *particles_weights, std::mt19937 &rng, unsigned int *indices)
 {
     // Resample from weights
     resample_particles(nparticles, particles_weights, rng, indices, particles_x, particles_y);
@@ -193,4 +259,6 @@ void device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int n
     // Move all particles according to our movement model (plus Gaussian noise)
     // Also update weights based on how likely the movements were
     move_particles(estimated_vx, estimated_vy, nparticles, particles_x, particles_y, particles_weights, rng);
+
+    return 0;
 }

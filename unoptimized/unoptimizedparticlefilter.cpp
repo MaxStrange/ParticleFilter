@@ -97,7 +97,7 @@ void UnoptimizedParticleFilter::update_part1(Robot &robot)
     robot.get_xy_estimate(&estimate_x, &estimate_y);
 
     // Assign the weights
-    double accumulated = 0.0;
+    float accumulated = 0.0;
     for (unsigned int i = 0; i < this->nparticles; i++)
     {
         this->particles_weights[i] = this->calculate_likelihood(i, estimate_x, estimate_y);
@@ -126,9 +126,9 @@ void UnoptimizedParticleFilter::update_part2(Robot &robot)
     robot.get_v_estimate(&estimate_vx, &estimate_vy);
     for (unsigned int i = 0; i < this->nparticles; i++)
     {
-        static const double sigma = 2.5;
-        double vx = this->gaussian_noise(estimate_vx, sigma);
-        double vy = this->gaussian_noise(estimate_vy, sigma);
+        static const float sigma = 2.5;
+        float vx = this->gaussian_noise(estimate_vx, sigma);
+        float vy = this->gaussian_noise(estimate_vy, sigma);
         this->particles_x[i] += vx;
         this->particles_y[i] += vy;
         this->particles_weights[i] = this->probability_of_value_from_bivariate_gaussian(vx, vy, estimate_vx, estimate_vy, sigma, sigma);
@@ -139,7 +139,7 @@ void UnoptimizedParticleFilter::update_part2(Robot &robot)
 //////////////////////////// PRIVATE FUNCTIONS ///////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 
-double UnoptimizedParticleFilter::calculate_likelihood(unsigned int i, int measured_x, int measured_y) const
+float UnoptimizedParticleFilter::calculate_likelihood(unsigned int i, int measured_x, int measured_y) const
 {
     /*
         P(A | B) = P(B | A) * P(A)   /  P(B)
@@ -159,21 +159,21 @@ double UnoptimizedParticleFilter::calculate_likelihood(unsigned int i, int measu
 
         So now we need the probability of measured_x and measured_y, given a Gaussian around location.
     */
-    double x = (double)this->particles_x[i];
-    double y = (double)this->particles_y[i];
+    float x = (float)this->particles_x[i];
+    float y = (float)this->particles_y[i];
 
     return this->probability_of_value_from_bivariate_gaussian(x, y, measured_x, measured_y, 2.5, 2.5);
 }
 
-double UnoptimizedParticleFilter::gaussian_noise(double mean, double sigma)
+float UnoptimizedParticleFilter::gaussian_noise(float mean, float sigma)
 {
-    std::normal_distribution<double> gaussian(mean, sigma);
+    std::normal_distribution<float> gaussian(mean, sigma);
     return gaussian(this->rng);
 }
 
 void UnoptimizedParticleFilter::normalize_weights(void)
 {
-    double sum = 0.0;
+    float sum = 0.0;
     for (unsigned int i = 0; i < this->nparticles; i++)
     {
         sum += this->particles_weights[i];
@@ -189,17 +189,17 @@ void UnoptimizedParticleFilter::normalize_weights(void)
     }
 }
 
-double UnoptimizedParticleFilter::probability_of_value_from_bivariate_gaussian(double x, double y, double mean_x, double mean_y, double sigma_x, double sigma_y) const
+float UnoptimizedParticleFilter::probability_of_value_from_bivariate_gaussian(float x, float y, float mean_x, float mean_y, float sigma_x, float sigma_y) const
 {
-    const double rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
-    double denom = 2.0 * M_PI * sigma_x * sigma_y * sqrt(1.0 - (rho * rho));
-    double A = ((x - mean_x) * (x - mean_x)) / (sigma_x * sigma_x);
-    double B = ((2.0 * rho * (x - mean_x) * (y - mean_y)) / (sigma_x * sigma_y));
-    double C = ((y - mean_y) * (y - mean_y)) / (sigma_y * sigma_y);
+    const float rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
+    float denom = 2.0 * M_PI * sigma_x * sigma_y * sqrt(1.0 - (rho * rho));
+    float A = ((x - mean_x) * (x - mean_x)) / (sigma_x * sigma_x);
+    float B = ((2.0 * rho * (x - mean_x) * (y - mean_y)) / (sigma_x * sigma_y));
+    float C = ((y - mean_y) * (y - mean_y)) / (sigma_y * sigma_y);
     A /= 1000.0;  // For numerical stability
     C /= 1000.0;  // Ditto
-    double z = A - B + C;
-    double a = (-1.0 * z) / (2.0 * (1.0 - rho * rho));
+    float z = A - B + C;
+    float a = (-1.0 * z) / (2.0 * (1.0 - rho * rho));
 
     return exp(a) / denom;
 }
@@ -207,7 +207,7 @@ double UnoptimizedParticleFilter::probability_of_value_from_bivariate_gaussian(d
 void UnoptimizedParticleFilter::resample_particles(void)
 {
     // Create a distribution I will need
-    auto dist = std::uniform_real_distribution<double>(0.0, 1.0);
+    auto dist = std::uniform_real_distribution<float>(0.0, 1.0);
 
     // Create the new particles in vectors
     std::vector<int> pxs;
@@ -220,8 +220,8 @@ void UnoptimizedParticleFilter::resample_particles(void)
     this->sort_particles_by_weight_in_place();
 
     // Align a CMF (cumulative mass function) array, where each bin is the sum of all previous weights
-    std::vector<double> cmf;
-    double acc_prob_mass = 0.0;
+    std::vector<float> cmf;
+    float acc_prob_mass = 0.0;
     for (unsigned int i = 0; i < this->nparticles; i++)
     {
         acc_prob_mass += this->particles_weights[i];
@@ -231,7 +231,7 @@ void UnoptimizedParticleFilter::resample_particles(void)
     // Do a search into the CMF to find the place where our randomly generated probability (0 to 1) fits
     for (unsigned int i = 0; i < this->nparticles; i++)
     {
-        double p = dist(this->rng);
+        float p = dist(this->rng);
         assert((p <= 1.0) && (p >= 0.0));
 
         int cmf_index = -1;
@@ -274,10 +274,10 @@ void UnoptimizedParticleFilter::sort_particles_by_weight_in_place(void)
     // Make copies of the three arrays (gross)
     int *xcpy = (int *)malloc(sizeof(int) * this->nparticles);
     int *ycpy = (int *)malloc(sizeof(int) * this->nparticles);
-    double *wcpy = (double *)malloc(sizeof(double) * this->nparticles);
+    float *wcpy = (float *)malloc(sizeof(float) * this->nparticles);
     memcpy(xcpy, this->particles_x, sizeof(int) * this->nparticles);
     memcpy(ycpy, this->particles_y, sizeof(int) * this->nparticles);
-    memcpy(wcpy, this->particles_weights, sizeof(double) * this->nparticles);
+    memcpy(wcpy, this->particles_weights, sizeof(float) * this->nparticles);
 
     // Sort each array according to the sorted indices
     for (unsigned int i = 0; i < this->nparticles; i++)
