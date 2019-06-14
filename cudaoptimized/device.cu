@@ -61,14 +61,14 @@ __global__ void kernel_calculate_likelihood(int *particles_x, int *particles_y, 
 
 int device_calculate_likelihood(const int *particles_x, const int *particles_y, int estimate_x, int estimate_y, float *weights, unsigned int nparticles)
 {
+#define OPTIMIZED 1
+#if OPTIMIZED
     cudaError_t err;
     int *dev_particles_x = nullptr;
     int *dev_particles_y = nullptr;
     float *dev_weights = nullptr;
 
-    unsigned int i;
-
-#define CHECK_CUDA_ERR(err) do { if (err != cudaSuccess) { err = (cudaError_t)__LINE__; goto fail; }} while (0)
+    #define CHECK_CUDA_ERR(err) do { if (err != cudaSuccess) { err = (cudaError_t)__LINE__; goto fail; }} while (0)
 
     /* Malloc all the device memory we need */
     err = cudaMalloc(&dev_particles_x, nparticles * sizeof(int));
@@ -91,14 +91,7 @@ int device_calculate_likelihood(const int *particles_x, const int *particles_y, 
     CHECK_CUDA_ERR(err);
 
     /* Call the kernel */
-    //kernel_calculate_likelihood<<<ceil(nparticles / 524.0), 524>>>(dev_particles_x, dev_particles_y, dev_weights, estimate_x, estimate_y, nparticles);
-    for (i = 0; i < nparticles; i++)
-    {
-        float x = (float)particles_x[i];
-        float y = (float)particles_y[i];
-
-        weights[i] = probability_of_value_from_bivariate_gaussian(x, y, estimate_x, estimate_y, 2.5, 2.5);
-    }
+    kernel_calculate_likelihood<<<ceil(nparticles / 524.0), 524>>>(dev_particles_x, dev_particles_y, dev_weights, estimate_x, estimate_y, nparticles);
 
     /* Copy array back onto host */
     err = cudaMemcpy(weights, dev_weights, nparticles * sizeof(float), cudaMemcpyDeviceToHost);
@@ -114,11 +107,23 @@ int device_calculate_likelihood(const int *particles_x, const int *particles_y, 
     err = cudaFree(dev_weights);
     CHECK_CUDA_ERR(err);
 
-#undef CHECK_CUDA_ERR
+    #undef CHECK_CUDA_ERR
 
 fail:
     assert(err == cudaSuccess);
     return (int)err;
+#else
+
+    for (unsigned int i = 0; i < nparticles; i++)
+    {
+        float x = (float)particles_x[i];
+        float y = (float)particles_y[i];
+
+        weights[i] = probability_of_value_from_bivariate_gaussian(x, y, estimate_x, estimate_y, 2.5, 2.5);
+    }
+
+    return 0;
+#endif
 }
 
 static void move_particles(int estimated_vx, int estimated_vy, unsigned int nparticles, int *particles_x, int *particles_y, float *particles_weights, std::mt19937 &rng)
