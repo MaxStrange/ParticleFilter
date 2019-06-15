@@ -16,7 +16,9 @@ CC := nvcc
 
 # Rando flags
 COMPILER_FLAGS := --std=c++14
-COMPILER_FLAGS += -Xlinker /subsystem:windows
+ifeq ($(OS),Windows_NT)
+	COMPILER_FLAGS += -Xlinker /subsystem:windows
+endif
 
 # Linker Path
 ifeq ($(OS),Windows_NT)
