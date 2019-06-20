@@ -44,14 +44,14 @@ __global__ void kernel_calculate_likelihood(int *particles_x, int *particles_y, 
 
         // Compute the probability of getting this x,y combo from a distribution centered at estimate_x, estimte_y.
         const float rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
-        float denom = 2.0 * M_PI * sigma_x * sigma_y * sqrt(1.0 - (rho * rho));
+        float denom = 2.0f * M_PI * sigma_x * sigma_y * sqrt(1.0f - (rho * rho));
         float A = ((x - mean_x) * (x - mean_x)) / (sigma_x * sigma_x);
-        float B = ((2.0 * rho * (x - mean_x) * (y - mean_y)) / (sigma_x * sigma_y));
+        float B = ((2.0f * rho * (x - mean_x) * (y - mean_y)) / (sigma_x * sigma_y));
         float C = ((y - mean_y) * (y - mean_y)) / (sigma_y * sigma_y);
-        A /= 1000.0;  // For numerical stability
-        C /= 1000.0;  // Ditto
+        A /= 1000.0f;  // For numerical stability
+        C /= 1000.0f;  // Ditto
         float z = A - B + C;
-        float a = (-1.0 * z) / (2.0 * (1.0 - rho * rho));
+        float a = (-1.0f * z) / (2.0f * (1.0f - rho * rho));
 
         float prob = exp(a) / denom;
 
@@ -91,7 +91,7 @@ int device_calculate_likelihood(const int *particles_x, const int *particles_y, 
     CHECK_CUDA_ERR(err);
 
     /* Call the kernel */
-    kernel_calculate_likelihood<<<ceil(nparticles / 524.0), 524>>>(dev_particles_x, dev_particles_y, dev_weights, estimate_x, estimate_y, nparticles);
+    kernel_calculate_likelihood<<<ceil(nparticles / 512.0), 512>>>(dev_particles_x, dev_particles_y, dev_weights, estimate_x, estimate_y, nparticles);
 
     /* Copy array back onto host */
     err = cudaMemcpy(weights, dev_weights, nparticles * sizeof(float), cudaMemcpyDeviceToHost);
