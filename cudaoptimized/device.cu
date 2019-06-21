@@ -89,7 +89,7 @@ int device_calculate_likelihood(const int *particles_x, const int *particles_y, 
     CHECK_CUDA_ERR(err);
 
     /* Call the kernel */
-    kernel_calculate_likelihood<<<ceil(nparticles / (float)nthreads_per_block), nthreads>>>(dev_particles_x, dev_particles_y, dev_weights, nparticles, estimate_x, estimate_y);
+    kernel_calculate_likelihood<<<ceil(nparticles / (float)nthreads_per_block), nthreads_per_block>>>(dev_particles_x, dev_particles_y, dev_weights, nparticles, estimate_x, estimate_y);
     err = cudaDeviceSynchronize();
     CHECK_CUDA_ERR(err);
 
@@ -174,6 +174,81 @@ static void normalize_weights(unsigned int nparticles, float *particles_weights)
     }
 }
 
+static void complete_resample_and_move_step(unsigned int nparticles, float *particles_weights, std::mt19937 &rng, unsigned int *indices, int *particles_x, int *particles_y, int estimated_vx, int estimated_vy)
+{
+    // Create a distribution I will need
+    auto dist = std::uniform_real_distribution<float>(0.0, 1.0);
+    std::uniform_int_distribution<std::mt19937::result_type> height_distribution;
+    std::uniform_int_distribution<std::mt19937::result_type> width_distribution;
+
+    // Create the new particles in vectors
+    std::vector<int> pxs;
+    std::vector<int> pys;
+
+    // Normalize the weights so that each one is between 0 and 1
+    normalize_weights(nparticles, particles_weights);
+
+    // Sort the particles by weight (in reverse - heaviest at the front of the array)
+    sort_particles_by_weight_in_place(indices, nparticles, particles_weights, particles_x, particles_y);
+
+    // Align a CMF (cumulative mass function) array, where each bin is the sum of all previous weights
+    std::vector<float> cmf;
+    float acc_prob_mass = 0.0;
+    for (unsigned int i = 0; i < nparticles; i++)
+    {
+        acc_prob_mass += particles_weights[i];
+        cmf.push_back(acc_prob_mass);
+    }
+
+    // Do a search into the CMF to find the place where our randomly generated probability (0 to 1) fits
+    for (unsigned int i = 0; i < nparticles; i++)
+    {
+        float p = dist(rng);
+        assert((p <= 1.0) && (p >= 0.0));
+
+        int cmf_index = -1;
+        for (unsigned int j = 0; j < nparticles; j++)
+        {
+            // Search for where the generated probability belongs
+            if (p <= cmf[j])
+            {
+                cmf_index = j;
+                break;
+            }
+        }
+
+        if (cmf_index >= 0)
+        {
+            pxs.push_back(particles_x[cmf_index]);
+            pys.push_back(particles_y[cmf_index]);
+        }
+        else
+        {
+            // Probabilities are all zero. Resample from uniform.
+            pxs.push_back(width_distribution(rng));
+            pys.push_back(height_distribution(rng));
+        }
+    }
+
+    // Now overwrite the current batch of particles with the new ones
+    for (unsigned int i = 0; i < nparticles; i++)
+    {
+        particles_x[i] = pxs[i];
+        particles_y[i] = pys[i];
+    }
+
+    // Move particles
+    for (unsigned int i = 0; i < nparticles; i++)
+    {
+        static const float sigma = 2.5;
+        float vx = gaussian_noise(estimated_vx, sigma, rng);
+        float vy = gaussian_noise(estimated_vy, sigma, rng);
+        particles_x[i] += vx;
+        particles_y[i] += vy;
+        particles_weights[i] = probability_of_value_from_bivariate_gaussian(vx, vy, estimated_vx, estimated_vy, sigma, sigma);
+    }
+}
+
 static void resample_particles(unsigned int nparticles, float *particles_weights, std::mt19937 &rng, unsigned int *indices, int *particles_x, int *particles_y)
 {
     // Create a distribution I will need
@@ -240,10 +315,9 @@ static void resample_particles(unsigned int nparticles, float *particles_weights
 
 __global__ void kernel_normalize_weights_reduction(unsigned int nparticles, float *dev_weights, float *intermediate)
 {
-    // Dynamically-sized shared memory buffer for the reduction
+    // Dynamically-sized shared memory buffer for the reduction (this should be no smaller than blockDim.x)
     extern __shared__ float tmp[];
 
-    float total = 0.0;
     int index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // load all weights in this block into temp array
@@ -264,7 +338,28 @@ __global__ void kernel_normalize_weights_reduction(unsigned int nparticles, floa
     }
 
     // Each block now needs to add its total to its index in intermediate
-    intermediate[blockIdx.x] = tmp[blockDim.x - 1];
+    // So determine which thread should do this, since we only need one
+    // item from each block
+    bool lastusefulthread;
+    if (blockIdx.x == (gridDim.x - 1))
+    {
+        // If my block index is that of the final block, then I am
+        // the thread responsible for the last useful item if
+        // my index is that of the final particle
+        lastusefulthread = (index == (nparticles - 1));
+    }
+    else
+    {
+        // If my block is not the final one, then I am
+        // the thread responsible for the last useful item if
+        // my index is that of the final item in this block
+        lastusefulthread = (threadIdx.x == (blockDim.x - 1));
+    }
+
+    if (lastusefulthread)
+    {
+        intermediate[blockIdx.x] = tmp[threadIdx.x];
+    }
 }
 
 __global__ void kernel_normalize_weights_complete(unsigned int nparticles, float *dev_weights, float summed_weights)
@@ -323,29 +418,38 @@ int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int np
     err = cudaMemcpy(dev_indices, indices, nparticles * sizeof(unsigned int), cudaMemcpyHostToDevice);
     CHECK_CUDA_ERR(err);
 
-    /* Launch kernels */
-    kernel_normalize_weights_reduction<<<nblocks, nthreads_per_block, sizeof(float) * nthreads_per_block>>>(nparticles, dev_weights, dev_sum_tmp);
-    err = cudaDeviceSynchronize();
-    CHECK_CUDA_ERR(err);
+    ///* Launch kernels */
+    //kernel_normalize_weights_reduction<<<nblocks, nthreads_per_block, (sizeof(float) * nthreads_per_block)>>>(nparticles, dev_weights, dev_sum_tmp);
+    //err = cudaDeviceSynchronize();
+    //CHECK_CUDA_ERR(err);
 
-    // Sequential sum of the intermediate results in dev_sum_tmp
-    sum_tmp = (float *)malloc(nblocks * sizeof(float));
-    err = cudaMemcpy(sum_tmp, dev_sum_tmp, nblocks * sizeof(float), cudaMemcpyDeviceToHost);
-    CHECK_CUDA_ERR(err);
-    for (unsigned int i = 0; i < nblocks; i++)
-    {
-        summed_weights += sum_tmp[i];
-    }
-    free(sum_tmp);
-    sum_tmp = nullptr;
+    //// Sequential sum of the intermediate results in dev_sum_tmp
+    //sum_tmp = (float *)malloc(nblocks * sizeof(float));
+    //err = cudaMemcpy(sum_tmp, dev_sum_tmp, nblocks * sizeof(float), cudaMemcpyDeviceToHost);
+    //CHECK_CUDA_ERR(err);
+    //for (unsigned int i = 0; i < nblocks; i++)
+    //{
+    //    summed_weights += sum_tmp[i];
+    //}
+    //free(sum_tmp);
+    //sum_tmp = nullptr;
 
-    kernel_normalize_weights_complete<<<nblocks, nthreads_per_block>>>(nparticles, dev_weights, summed_weights);
-    err = cudaDeviceSynchronize();
-    CHECK_CUDA_ERR(err);
+    //kernel_normalize_weights_complete<<<nblocks, nthreads_per_block>>>(nparticles, dev_weights, summed_weights);
+    //err = cudaDeviceSynchronize();
+    //CHECK_CUDA_ERR(err);
+
     //kernel_sort_particles
     //kernel_resample_particles
     //kernel_reset_all_weights
     //kernel_move_particles
+
+    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
+    //Remove the logic here as you convert it to CUDA
+    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
+    complete_resample_and_move_step(nparticles, particles_weights, rng, indices, particles_x, particles_y, estimated_vx, estimated_vy);
+    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
+    // End
+    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
 
     /* Transfer results back to host */
     err = cudaMemcpy(particles_x, dev_particles_x, nparticles * sizeof(int), cudaMemcpyDeviceToHost);
