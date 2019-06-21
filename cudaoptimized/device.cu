@@ -59,7 +59,7 @@ __global__ void kernel_calculate_likelihood(int *particles_x, int *particles_y, 
     }
 }
 
-int device_calculate_likelihood(const int *particles_x, const int *particles_y, int estimate_x, int estimate_y, float *weights, unsigned int nparticles)
+int device_calculate_likelihood(const int *particles_x, const int *particles_y, int estimate_x, int estimate_y, float *weights, unsigned int nparticles, int nthreads_per_block)
 {
     cudaError_t err;
     int *dev_particles_x = nullptr;
@@ -89,7 +89,7 @@ int device_calculate_likelihood(const int *particles_x, const int *particles_y, 
     CHECK_CUDA_ERR(err);
 
     /* Call the kernel */
-    kernel_calculate_likelihood<<<ceil(nparticles / 512.0), 512>>>(dev_particles_x, dev_particles_y, dev_weights, nparticles, estimate_x, estimate_y);
+    kernel_calculate_likelihood<<<ceil(nparticles / (float)nthreads_per_block), nthreads>>>(dev_particles_x, dev_particles_y, dev_weights, nparticles, estimate_x, estimate_y);
     err = cudaDeviceSynchronize();
     CHECK_CUDA_ERR(err);
 
@@ -238,8 +238,156 @@ static void resample_particles(unsigned int nparticles, float *particles_weights
     }
 }
 
-int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int nparticles, int *particles_x, int *particles_y, float *particles_weights, std::mt19937 &rng, unsigned int *indices)
+__global__ void kernel_normalize_weights_reduction(unsigned int nparticles, float *dev_weights, float *intermediate)
 {
+    // Dynamically-sized shared memory buffer for the reduction
+    extern __shared__ float tmp[];
+
+    float total = 0.0;
+    int index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    // load all weights in this block into temp array
+    if (index < nparticles)
+    {
+        tmp[index] = dev_weights[index];
+    }
+    __syncthreads();
+
+    // Now do a binary sum tree to reduce to a single accumulated total weight
+    for (int stride = 1; stride < nparticles; stride *= 2)
+    {
+        if ((index < nparticles) && ((index - stride) >= 0))
+        {
+            tmp[index] += tmp[index - stride];
+        }
+        __syncthreads();
+    }
+
+    // Each block now needs to add its total to its index in intermediate
+    intermediate[blockIdx.x] = tmp[blockDim.x - 1];
+}
+
+__global__ void kernel_normalize_weights_complete(unsigned int nparticles, float *dev_weights, float summed_weights)
+{
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Divide all weights by sum in parallel
+    if ((index < nparticles) && summed_weights > 0.0f)
+    {
+        dev_weights[index] /= summed_weights;
+    }
+}
+
+int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int nparticles, int *particles_x, int *particles_y, float *particles_weights, std::mt19937 &rng, unsigned int *indices, int nthreads_per_block)
+{
+    #if 1
+    ///////////////////////////////////////////////////////////////////////////////////////////
+    cudaError_t err;
+    int *dev_particles_x = nullptr;
+    int *dev_particles_y = nullptr;
+    float *dev_weights = nullptr;
+    unsigned int *dev_indices = nullptr;
+    float *dev_sum_tmp = nullptr;   // The temporary results from each block during sum
+    float *sum_tmp = nullptr;
+    float summed_weights = 0.0;
+    int nblocks = ceil(nparticles / (float)nthreads_per_block);
+
+    #define CHECK_CUDA_ERR(err) do { if (err != cudaSuccess) { err = (cudaError_t)__LINE__; goto fail; }} while (0)
+
+    /* Allocate everything we need */
+    err = cudaMalloc(&dev_particles_x, nparticles * sizeof(int));
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMalloc(&dev_particles_y, nparticles * sizeof(int));
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMalloc(&dev_weights, nparticles * sizeof(float));
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMalloc(&dev_indices, nparticles * sizeof(unsigned int));
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMalloc(&dev_sum_tmp, nblocks * sizeof(float));
+    CHECK_CUDA_ERR(err);
+
+    /* Copy everything to the device */
+    err = cudaMemcpy(dev_particles_x, particles_x, nparticles * sizeof(int), cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMemcpy(dev_particles_y, particles_y, nparticles * sizeof(int), cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMemcpy(dev_weights, particles_weights, nparticles * sizeof(float), cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMemcpy(dev_indices, indices, nparticles * sizeof(unsigned int), cudaMemcpyHostToDevice);
+    CHECK_CUDA_ERR(err);
+
+    /* Launch kernels */
+    kernel_normalize_weights_reduction<<<nblocks, nthreads_per_block, sizeof(float) * nthreads_per_block>>>(nparticles, dev_weights, dev_sum_tmp);
+    err = cudaDeviceSynchronize();
+    CHECK_CUDA_ERR(err);
+
+    // Sequential sum of the intermediate results in dev_sum_tmp
+    sum_tmp = (float *)malloc(nblocks * sizeof(float));
+    err = cudaMemcpy(sum_tmp, dev_sum_tmp, nblocks * sizeof(float), cudaMemcpyDeviceToHost);
+    CHECK_CUDA_ERR(err);
+    for (unsigned int i = 0; i < nblocks; i++)
+    {
+        summed_weights += sum_tmp[i];
+    }
+    free(sum_tmp);
+    sum_tmp = nullptr;
+
+    kernel_normalize_weights_complete<<<nblocks, nthreads_per_block>>>(nparticles, dev_weights, summed_weights);
+    err = cudaDeviceSynchronize();
+    CHECK_CUDA_ERR(err);
+    //kernel_sort_particles
+    //kernel_resample_particles
+    //kernel_reset_all_weights
+    //kernel_move_particles
+
+    /* Transfer results back to host */
+    err = cudaMemcpy(particles_x, dev_particles_x, nparticles * sizeof(int), cudaMemcpyDeviceToHost);
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMemcpy(particles_y, dev_particles_y, nparticles * sizeof(int), cudaMemcpyDeviceToHost);
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMemcpy(particles_weights, dev_weights, nparticles * sizeof(float), cudaMemcpyDeviceToHost);
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMemcpy(indices, dev_indices, nparticles * sizeof(unsigned int), cudaMemcpyDeviceToHost);
+    CHECK_CUDA_ERR(err);
+
+    /* Free up memory */
+    err = cudaFree(dev_particles_x);
+    dev_particles_x = nullptr;
+    CHECK_CUDA_ERR(err);
+
+    err = cudaFree(dev_particles_y);
+    dev_particles_y = nullptr;
+    CHECK_CUDA_ERR(err);
+
+    err = cudaFree(dev_weights);
+    dev_weights = nullptr;
+    CHECK_CUDA_ERR(err);
+
+    err = cudaFree(dev_indices);
+    dev_indices = nullptr;
+    CHECK_CUDA_ERR(err);
+
+    err = cudaFree(dev_sum_tmp);
+    dev_sum_tmp = nullptr;
+    CHECK_CUDA_ERR(err);
+
+    #undef CHECK_CUDA_ERR
+
+fail:
+    assert(err == cudaSuccess);
+    return err;
+    ///////////////////////////////////////////////////////////////////////////////////////////
+#else
     // Resample from weights
     resample_particles(nparticles, particles_weights, rng, indices, particles_x, particles_y);
 
@@ -254,4 +402,5 @@ int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int np
     move_particles(estimated_vx, estimated_vy, nparticles, particles_x, particles_y, particles_weights, rng);
 
     return 0;
+#endif
 }

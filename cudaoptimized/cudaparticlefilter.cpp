@@ -87,6 +87,8 @@ int CudaParticleFilter::init(void)
 
     this->print_dev_props(dev_id, dev_prop);
 
+    this->dev_prop = dev_prop;
+
 fail:
     return err;
 }
@@ -122,7 +124,7 @@ void CudaParticleFilter::update_part1(Robot &robot)
     robot.get_xy_estimate(&estimate_x, &estimate_y);
 
     // Assign the weights
-    device_calculate_likelihood(this->particles_x, this->particles_y, estimate_x, estimate_y, this->particles_weights, this->nparticles);
+    device_calculate_likelihood(this->particles_x, this->particles_y, estimate_x, estimate_y, this->particles_weights, this->nparticles, this->dev_prop.maxThreadsDim[0]);
 
     // Take a break now to update the graphics in the main loop
 }
@@ -132,7 +134,7 @@ void CudaParticleFilter::update_part2(Robot &robot)
     int estimate_vx;
     int estimate_vy;
     robot.get_v_estimate(&estimate_vx, &estimate_vy);
-    device_resample_and_move(estimate_vx, estimate_vy, this->nparticles, this->particles_x, this->particles_y, this->particles_weights, this->rng, this->indices);
+    device_resample_and_move(estimate_vx, estimate_vy, this->nparticles, this->particles_x, this->particles_y, this->particles_weights, this->rng, this->indices, this->dev_prop.maxThreadsDim[0]);
 }
 
 void CudaParticleFilter::print_dev_props(int dev_id, const cudaDeviceProp &dev_prop) const

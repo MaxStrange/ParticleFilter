@@ -25,6 +25,7 @@ public:
     void update_part2(Robot &robot);
 
 private:
+    cudaDeviceProp dev_prop;
     std::mt19937 rng;
     std::uniform_int_distribution<std::mt19937::result_type> height_distribution;
     std::uniform_int_distribution<std::mt19937::result_type> width_distribution;
