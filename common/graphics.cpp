@@ -1,8 +1,12 @@
 #include <iostream>
 #ifdef _WIN32
-    #include "../SDL/include/SDL.h"
+    #ifndef DEBUG
+        #include "../SDL/include/SDL.h"
+    #endif
 #else
-    #include <SDL2/SDL.h>
+    #ifndef
+        #include <SDL2/SDL.h>
+    #endif
 #endif
 #include "graphics.h"
 
@@ -25,10 +29,12 @@ Graphics::Graphics(void)
     this->done = false;
     this->screen_width = DEFAULT_SCREEN_WIDTH;
     this->screen_height = DEFAULT_SCREEN_HEIGHT;
+#ifndef DEBUG
     this->window = nullptr;
     this->screensurface = nullptr;
     this->background = nullptr;
     this->renderer = nullptr;
+#endif
 }
 
 Graphics::Graphics(int width, int height)
@@ -36,10 +42,12 @@ Graphics::Graphics(int width, int height)
     this->done = false;
     this->screen_width = width;
     this->screen_height = height;
+#ifndef DEBUG
     this->window = nullptr;
     this->screensurface = nullptr;
     this->background = nullptr;
     this->renderer = nullptr;
+#endif
 }
 
 int Graphics::get_screenheight(void) const
@@ -56,6 +64,7 @@ int Graphics::init(void)
 {
     int err;
 
+#ifndef DEBUG
     err = SDL_Init(SDL_INIT_VIDEO);
     if (err)
     {
@@ -83,6 +92,10 @@ int Graphics::init(void)
         err = __LINE__;
         goto fail;
     }
+#else // DEBUG
+    err = 0;
+    goto fail;
+#endif
 
 fail:
     return err;
@@ -90,12 +103,14 @@ fail:
 
 int Graphics::exit(void)
 {
+#ifndef DEBUG
     SDL_DestroyRenderer(this->renderer);
     SDL_DestroyWindow(this->window);
     this->renderer = nullptr;
     this->window = nullptr;
 
     SDL_Quit();
+#endif
 
     return 0;
 }
@@ -124,6 +139,7 @@ bool Graphics::isdone(void)
 
 int Graphics::process_event_queue(void)
 {
+#ifndef DEBUG
     SDL_Event e;
 
     // Check if we have an event in the queue
@@ -141,10 +157,24 @@ int Graphics::process_event_queue(void)
                 break;
         }
     }
+#endif
 
     return 0;
 }
 
+#ifdef DEBUG
+int Graphics::update_image(const Robot &robot, const ParticleFilter &pf)
+{
+    std::cout << "Robot (x,y): (" << robot.get_xloc() << ", " << robot.get_yloc() << ")" << std::endl;
+    for (unsigned int i = 0; i < pf.get_nparticles(); i++)
+    {
+        int x = pf.get_xpos(i);
+        int y = pf.get_ypos(i);
+        std::cout << "Particle[" << i << "]: (" << x << ", " << y << ")" << std::endl;
+    }
+    return 0;
+}
+#else
 int Graphics::update_image(const Robot &robot, const ParticleFilter &pf)
 {
     int err;
@@ -185,3 +215,4 @@ int Graphics::update_image(const Robot &robot, const ParticleFilter &pf)
 fail:
     return err;
 }
+#endif // DEBUG

@@ -4,9 +4,13 @@
 #pragma once
 
 #ifdef _WIN32
-    #include "../SDL/include/SDL.h"
+    #ifndef DEBUG
+        #include "../SDL/include/SDL.h"
+    #endif
 #else
-    #include <SDL2/SDL.h>
+    #ifndef DEBUG
+        #include <SDL2/SDL.h>
+    #endif
 #endif
 #include "particlefilter.h"
 #include "robot.h"
@@ -52,10 +56,12 @@ private:
     int screen_width;
     int screen_height;
 
+#ifndef DEBUG
     SDL_Window *window;
     SDL_Surface *screensurface;
     SDL_Surface *background;
     SDL_Renderer *renderer;
+#endif
 
     /** Process the event queue, handling any user input. */
     int process_event_queue(void);

@@ -1,9 +1,11 @@
 #include <algorithm>
 #include <assert.h>
 #include <cuda_runtime.h>
+#include <iostream>
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <random>
+#include <stdio.h>
 #include <vector>
 #include "device.h"
 
@@ -34,8 +36,8 @@ __global__ void kernel_calculate_likelihood(int *particles_x, int *particles_y, 
 
     if (index < nparticles)
     {
-        float x = particles_x[index];
-        float y = particles_y[index];
+        float x = (float)particles_x[index];
+        float y = (float)particles_y[index];
 
         const float sigma_x = 2.5;
         const float sigma_y = 2.5;
@@ -51,22 +53,48 @@ __global__ void kernel_calculate_likelihood(int *particles_x, int *particles_y, 
         A /= 1000.0f;  // For numerical stability
         C /= 1000.0f;  // Ditto
         float z = A - B + C;
+//        printf("est(%f, %f) ;  (%f, %f) => Denom: %f, A: %f, B: %f, C: %f, z: %f\n", estimate_x, estimate_y, x, y, denom, A, B, C, z);
         float a = (-1.0f * z) / (2.0f * (1.0f - rho * rho));
-
         float prob = exp(a) / denom;
-
         weights[index] = prob;
     }
 }
 
 int device_calculate_likelihood(const int *particles_x, const int *particles_y, int estimate_x, int estimate_y, float *weights, unsigned int nparticles)
 {
-#define OPTIMIZED 1
-#if OPTIMIZED
     cudaError_t err;
     int *dev_particles_x = nullptr;
     int *dev_particles_y = nullptr;
     float *dev_weights = nullptr;
+
+//    // Now check CPU version
+//    std::cout << "CPU:" << std::endl;
+//    for (unsigned int index = 0; index < nparticles; index++)
+//    {
+//        float x = (float)particles_x[index];
+//        float y = (float)particles_y[index];
+//
+//        const float sigma_x = 2.5;
+//        const float sigma_y = 2.5;
+//        float mean_x = estimate_x;
+//        float mean_y = estimate_y;
+//
+//        // Compute the probability of getting this x,y combo from a distribution centered at estimate_x, estimte_y.
+//        const float rho = 0.0; // cov / (sig1 * sig2); Covariance of two independent random variables is zero.
+//        float denom = 2.0f * M_PI * sigma_x * sigma_y * sqrt(1.0f - (rho * rho));
+//        float A = ((x - mean_x) * (x - mean_x)) / (sigma_x * sigma_x);
+//        float B = ((2.0f * rho * (x - mean_x) * (y - mean_y)) / (sigma_x * sigma_y));
+//        float C = ((y - mean_y) * (y - mean_y)) / (sigma_y * sigma_y);
+//        A /= 1000.0f;  // For numerical stability
+//        C /= 1000.0f;  // Ditto
+//        float z = A - B + C;
+//        printf("est(%f, %f) ;  (%f, %f) => Denom: %f, A: %f, B: %f, C: %f, z: %f\n", (float)estimate_x, (float)estimate_y, x, y, denom, A, B, C, z);
+//        float a = (-1.0f * z) / (2.0f * (1.0f - rho * rho));
+//        float prob = exp(a) / denom;
+//        weights[index] = prob;
+//    }
+//    //////////////////////////////
+
 
     #define CHECK_CUDA_ERR(err) do { if (err != cudaSuccess) { err = (cudaError_t)__LINE__; goto fail; }} while (0)
 
@@ -91,7 +119,10 @@ int device_calculate_likelihood(const int *particles_x, const int *particles_y, 
     CHECK_CUDA_ERR(err);
 
     /* Call the kernel */
-    kernel_calculate_likelihood<<<ceil(nparticles / 512.0), 512>>>(dev_particles_x, dev_particles_y, dev_weights, estimate_x, estimate_y, nparticles);
+    std::cout << "GPU:" << std::endl;
+    kernel_calculate_likelihood<<<ceil(nparticles / 512.0), 512>>>(dev_particles_x, dev_particles_y, dev_weights, nparticles, estimate_x, estimate_y);
+    err = cudaDeviceSynchronize();
+    CHECK_CUDA_ERR(err);
 
     /* Copy array back onto host */
     err = cudaMemcpy(weights, dev_weights, nparticles * sizeof(float), cudaMemcpyDeviceToHost);
@@ -112,18 +143,6 @@ int device_calculate_likelihood(const int *particles_x, const int *particles_y, 
 fail:
     assert(err == cudaSuccess);
     return (int)err;
-#else
-
-    for (unsigned int i = 0; i < nparticles; i++)
-    {
-        float x = (float)particles_x[i];
-        float y = (float)particles_y[i];
-
-        weights[i] = probability_of_value_from_bivariate_gaussian(x, y, estimate_x, estimate_y, 2.5, 2.5);
-    }
-
-    return 0;
-#endif
 }
 
 static void move_particles(int estimated_vx, int estimated_vy, unsigned int nparticles, int *particles_x, int *particles_y, float *particles_weights, std::mt19937 &rng)
