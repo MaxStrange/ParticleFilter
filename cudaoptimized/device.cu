@@ -237,6 +237,12 @@ static void complete_resample_and_move_step(unsigned int nparticles, float *part
         particles_y[i] = pys[i];
     }
 
+    // Reset all weights
+    for (unsigned int i = 0; i < nparticles; i++)
+    {
+        particles_weights[i] = 0.0;
+    }
+
     // Move particles
     for (unsigned int i = 0; i < nparticles; i++)
     {
@@ -261,7 +267,7 @@ static void resample_particles(unsigned int nparticles, float *particles_weights
     std::vector<int> pys;
 
     // Normalize the weights so that each one is between 0 and 1
-    normalize_weights(nparticles, particles_weights);
+    //normalize_weights(nparticles, particles_weights);
 
     // Sort the particles by weight (in reverse - heaviest at the front of the array)
     sort_particles_by_weight_in_place(indices, nparticles, particles_weights, particles_x, particles_y);
@@ -376,7 +382,6 @@ __global__ void kernel_normalize_weights_complete(unsigned int nparticles, float
 int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int nparticles, int *particles_x, int *particles_y, float *particles_weights, std::mt19937 &rng, unsigned int *indices, int nthreads_per_block)
 {
     #if 1
-    ///////////////////////////////////////////////////////////////////////////////////////////
     cudaError_t err;
     int *dev_particles_x = nullptr;
     int *dev_particles_y = nullptr;
@@ -418,38 +423,30 @@ int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int np
     err = cudaMemcpy(dev_indices, indices, nparticles * sizeof(unsigned int), cudaMemcpyHostToDevice);
     CHECK_CUDA_ERR(err);
 
-    ///* Launch kernels */
-    //kernel_normalize_weights_reduction<<<nblocks, nthreads_per_block, (sizeof(float) * nthreads_per_block)>>>(nparticles, dev_weights, dev_sum_tmp);
-    //err = cudaDeviceSynchronize();
-    //CHECK_CUDA_ERR(err);
+    /* Launch kernels */
+    kernel_normalize_weights_reduction<<<nblocks, nthreads_per_block, (sizeof(float) * nthreads_per_block)>>>(nparticles, dev_weights, dev_sum_tmp);
+    err = cudaDeviceSynchronize();
+    CHECK_CUDA_ERR(err);
 
-    //// Sequential sum of the intermediate results in dev_sum_tmp
-    //sum_tmp = (float *)malloc(nblocks * sizeof(float));
-    //err = cudaMemcpy(sum_tmp, dev_sum_tmp, nblocks * sizeof(float), cudaMemcpyDeviceToHost);
-    //CHECK_CUDA_ERR(err);
-    //for (unsigned int i = 0; i < nblocks; i++)
-    //{
-    //    summed_weights += sum_tmp[i];
-    //}
-    //free(sum_tmp);
-    //sum_tmp = nullptr;
+    // Sequential sum of the intermediate results in dev_sum_tmp
+    sum_tmp = (float *)malloc(nblocks * sizeof(float));
+    err = cudaMemcpy(sum_tmp, dev_sum_tmp, nblocks * sizeof(float), cudaMemcpyDeviceToHost);
+    CHECK_CUDA_ERR(err);
+    for (unsigned int i = 0; i < nblocks; i++)
+    {
+        summed_weights += sum_tmp[i];
+    }
+    free(sum_tmp);
+    sum_tmp = nullptr;
 
-    //kernel_normalize_weights_complete<<<nblocks, nthreads_per_block>>>(nparticles, dev_weights, summed_weights);
-    //err = cudaDeviceSynchronize();
-    //CHECK_CUDA_ERR(err);
+    kernel_normalize_weights_complete<<<nblocks, nthreads_per_block>>>(nparticles, dev_weights, summed_weights);
+    err = cudaDeviceSynchronize();
+    CHECK_CUDA_ERR(err);
 
     //kernel_sort_particles
     //kernel_resample_particles
     //kernel_reset_all_weights
     //kernel_move_particles
-
-    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
-    //Remove the logic here as you convert it to CUDA
-    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
-    complete_resample_and_move_step(nparticles, particles_weights, rng, indices, particles_x, particles_y, estimated_vx, estimated_vy);
-    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
-    // End
-    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
 
     /* Transfer results back to host */
     err = cudaMemcpy(particles_x, dev_particles_x, nparticles * sizeof(int), cudaMemcpyDeviceToHost);
@@ -463,6 +460,14 @@ int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int np
 
     err = cudaMemcpy(indices, dev_indices, nparticles * sizeof(unsigned int), cudaMemcpyDeviceToHost);
     CHECK_CUDA_ERR(err);
+
+    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
+    //Remove the logic here as you convert it to CUDA
+    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
+    complete_resample_and_move_step(nparticles, particles_weights, rng, indices, particles_x, particles_y, estimated_vx, estimated_vy);
+    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
+    // End
+    //&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&//
 
     /* Free up memory */
     err = cudaFree(dev_particles_x);
@@ -490,7 +495,6 @@ int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int np
 fail:
     assert(err == cudaSuccess);
     return err;
-    ///////////////////////////////////////////////////////////////////////////////////////////
 #else
     // Resample from weights
     resample_particles(nparticles, particles_weights, rng, indices, particles_x, particles_y);
