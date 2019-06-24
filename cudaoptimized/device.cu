@@ -324,21 +324,21 @@ __global__ void kernel_normalize_weights_reduction(unsigned int nparticles, floa
     // Dynamically-sized shared memory buffer for the reduction (this should be no smaller than blockDim.x)
     extern __shared__ float tmp[];
 
-    int index = blockDim.x * blockIdx.x + threadIdx.x;
+    unsigned int index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // load all weights in this block into temp array
     if (index < nparticles)
     {
-        tmp[index] = dev_weights[index];
+        tmp[threadIdx.x] = dev_weights[index];
     }
     __syncthreads();
 
     // Now do a binary sum tree to reduce to a single accumulated total weight
-    for (int stride = 1; stride < nparticles; stride *= 2)
+    for (unsigned int stride = 1; stride < nparticles; stride *= 2)
     {
-        if ((index < nparticles) && ((index - stride) >= 0))
+        if ((index < nparticles) && (threadIdx.x >= stride))
         {
-            tmp[index] += tmp[index - stride];
+            tmp[threadIdx.x] += tmp[threadIdx.x - stride];
         }
         __syncthreads();
     }
@@ -382,6 +382,9 @@ __global__ void kernel_normalize_weights_complete(unsigned int nparticles, float
 int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int nparticles, int *particles_x, int *particles_y, float *particles_weights, std::mt19937 &rng, unsigned int *indices, int nthreads_per_block)
 {
     #if 1
+    ///// TODO: This code fails when the number of particles is greater than 1024 (on my Windows machine).
+    /////       On my Windows machine, I have max threads per block = 1024, and max threads per dimension as (1024, 1024, 64) for a block.
+    /////       BTW shared memory is 49 KB on this machine.
     cudaError_t err;
     int *dev_particles_x = nullptr;
     int *dev_particles_y = nullptr;
@@ -493,7 +496,11 @@ int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int np
     #undef CHECK_CUDA_ERR
 
 fail:
-    assert(err == cudaSuccess);
+    if (err != cudaSuccess)
+    {
+        std::cout << "Error at line " << err << std::endl;
+        assert(false);
+    }
     return err;
 #else
     // Resample from weights
