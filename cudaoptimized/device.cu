@@ -189,7 +189,7 @@ static void complete_resample_and_move_step(unsigned int nparticles, float *part
     std::vector<int> pys;
 
     // Sort the particles by weight (in reverse - heaviest at the front of the array)
-    sort_particles_by_weight_in_place(indices, nparticles, particles_weights, particles_x, particles_y);
+    //sort_particles_by_weight_in_place(indices, nparticles, particles_weights, particles_x, particles_y);
 
     // Align a CMF (cumulative mass function) array, where each bin is the sum of all previous weights
     std::vector<float> cmf;
@@ -379,7 +379,10 @@ __global__ void kernel_normalize_weights_complete(unsigned int nparticles, float
     }
 }
 
-__device__ void kernel_sequential_merge(unsigned int *tmpbuf_indices, float *tmpbuf_weights, float *weights_a, unsigned int *indices_a, unsigned int len_arr_a, float *weights_b, unsigned int *indices_b, unsigned int len_arr_b)
+__device__ void kernel_sequential_merge(float *tmpbuf_weights, float *weights_a, float *weights_b,
+                                        int *tmpbuf_x,         int *x_a,         int *x_b,
+                                        int *tmpbuf_y,         int *y_a,         int *y_b,
+                                        unsigned int len_arr_a, unsigned int len_arr_b)
 {
     // Sorts backwards (largest first)
 
@@ -391,14 +394,16 @@ __device__ void kernel_sequential_merge(unsigned int *tmpbuf_indices, float *tmp
         float wb = weights_b[j];
         if (wa > wb)
         {
-            tmpbuf_indices[i + j] = indices_a[i];
             tmpbuf_weights[i + j] = weights_a[i];
+            tmpbuf_x[i + j] = x_a[i];
+            tmpbuf_y[i + j] = y_a[i];
             i++;
         }
         else
         {
-            tmpbuf_indices[i + j] = indices_b[j];
             tmpbuf_weights[i + j] = weights_b[j];
+            tmpbuf_x[i + j] = x_b[j];
+            tmpbuf_y[i + j] = y_b[j];
             j++;
         }
     }
@@ -406,18 +411,21 @@ __device__ void kernel_sequential_merge(unsigned int *tmpbuf_indices, float *tmp
     // Now add the rest from whichever array is not done
     if (j < len_arr_b)
     {
-        memcpy(&tmpbuf_indices[i + j], &indices_b[j], sizeof(unsigned int) * (len_arr_b - j));
         memcpy(&tmpbuf_weights[i + j], &weights_b[j], sizeof(unsigned int) * (len_arr_b - j));
+        memcpy(&tmpbuf_x[i + j], &x_b[j], sizeof(int) * (len_arr_b - j));
+        memcpy(&tmpbuf_y[i + j], &y_b[j], sizeof(int) * (len_arr_b - j));
     }
     else if (i < len_arr_a)
     {
-        memcpy(&tmpbuf_indices[i + j], &indices_a[i], sizeof(unsigned int) * (len_arr_a - i));
         memcpy(&tmpbuf_weights[i + j], &weights_a[i], sizeof(unsigned int) * (len_arr_a - i));
+        memcpy(&tmpbuf_x[i + j], &x_a[i], sizeof(int) * (len_arr_a - i));
+        memcpy(&tmpbuf_y[i + j], &y_b[j], sizeof(int) * (len_arr_b - j));
     }
 }
 
 // The most naive parallel merge sort possible - quite possibly worse than sequential // TODO do better
-__global__ void kernel_sort_particles(unsigned int nparticles, int *particles_x, int *particles_y, float *particles_weights, unsigned int *indices, float *tmpbuf_weights, unsigned int *tmpbuf_indices)
+__global__ void kernel_sort_particles(unsigned int nparticles, int *particles_x, int *particles_y, float *particles_weights,
+                                                               int *tmpbuf_x,    int *tmpbuf_y,    float *tmpbuf_weights)
 {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -425,7 +433,6 @@ __global__ void kernel_sort_particles(unsigned int nparticles, int *particles_x,
     {
         // All threads grab their corresponding input element(s)
         float weight = particles_weights[index];
-        unsigned int particle_index = indices[index];
 
         // Every other thread merges their input with their neighbor
         // Binary reduction merge
@@ -440,25 +447,23 @@ __global__ void kernel_sort_particles(unsigned int nparticles, int *particles_x,
                 unsigned int start_a = index - stride;
                 unsigned int start_b = start_a + len_arr_a;
 
-                // Merge the indices array
+                // Merge
                 float *weights_a = &particles_weights[start_a];
                 float *weights_b = &particles_weights[start_b];
-                unsigned int *indices_a = &indices[start_a];
-                unsigned int *indices_b = &indices[start_b];
+                int *x_a = &particles_x[start_a];
+                int *x_b = &particles_x[start_b];
+                int *y_a = &particles_y[start_a];
+                int *y_b = &particles_y[start_b];
                 // Since each thread is writing to the same global array, we need to make sure they are only
                 // writing to their appropriate subsection.
                 // The start of each thread's output array should be given by the following formula.
                 unsigned int tmpbuf_start = (index - 1) * (2 * stride);
-                kernel_sequential_merge(&tmpbuf_indices[tmpbuf_start], &tmpbuf_weights[tmpbuf_start], weights_a, indices_a, len_arr_a, weights_b, indices_b, len_arr_b);
-                // tmpbuf_indices should now contain subsection of sortedness.
-                // kernel_sequential_merge also sorts the weights as it goes, since why not?
+                kernel_sequential_merge(&tmpbuf_weights[tmpbuf_start], weights_a, weights_b, &tmpbuf_x[tmpbuf_start], x_a, x_b, &tmpbuf_y[tmpbuf_start], y_a, y_b, len_arr_a, len_arr_b);
             }
             // Since we are doing a reduction, we need to make sure each thread is done before moving on.
             __syncthreads();
         }
     }
-    // Now that we have the sorted indices, we need to use those indices to place everyone in the right place
-    // We also sorted the weights while we did this
 }
 
 int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int nparticles, int *particles_x, int *particles_y, float *particles_weights, std::mt19937 &rng, unsigned int *indices, int nthreads_per_block)
@@ -471,7 +476,8 @@ int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int np
     unsigned int *dev_indices = nullptr;
     float *dev_sum_tmp = nullptr;   // The temporary results from each block during sum
     float *dev_sort_weights_tmp = nullptr;
-    unsigned int *dev_sort_indices_tmp = nullptr;
+    int *dev_sort_x_tmp = nullptr;
+    int *dev_sort_y_tmp = nullptr;
     float *sum_tmp = nullptr;
     float summed_weights = 0.0;
     int nblocks = ceil(nparticles / (float)nthreads_per_block);
@@ -497,7 +503,10 @@ int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int np
     err = cudaMalloc(&dev_sort_weights_tmp, nparticles * sizeof(float));
     CHECK_CUDA_ERR(err);
 
-    err = cudaMalloc(&dev_sort_indices_tmp, nparticles * sizeof(unsigned int));
+    err = cudaMalloc(&dev_sort_x_tmp, nparticles * sizeof(int));
+    CHECK_CUDA_ERR(err);
+
+    err = cudaMalloc(&dev_sort_y_tmp, nparticles * sizeof(int));
     CHECK_CUDA_ERR(err);
 
     /* Copy everything to the device */
@@ -533,13 +542,15 @@ int device_resample_and_move(int estimated_vx, int estimated_vy, unsigned int np
     err = cudaDeviceSynchronize();
     CHECK_CUDA_ERR(err);
 
-    kernel_sort_particles<<<nblocks, nthreads_per_block>>>(nparticles, dev_particles_x, dev_particles_y, dev_weights, dev_indices, dev_sort_weights_tmp, dev_sort_indices_tmp);
+    kernel_sort_particles<<<nblocks, nthreads_per_block>>>(nparticles, dev_particles_x, dev_particles_y, dev_weights, dev_sort_x_tmp, dev_sort_y_tmp, dev_sort_weights_tmp);
     err = cudaDeviceSynchronize();
     CHECK_CUDA_ERR(err);
 
-    free(dev_sort_indices_tmp);
+    free(dev_sort_y_tmp);
+    free(dev_sort_x_tmp);
     free(dev_sort_weights_tmp);
-    dev_sort_indices_tmp = nullptr;
+    dev_sort_y_tmp = nullptr;
+    dev_sort_x_tmp = nullptr;
     dev_sort_weights_tmp = nullptr;
 
     //kernel_resample_particles
