@@ -431,9 +431,6 @@ __global__ void kernel_sort_particles(unsigned int nparticles, int *particles_x,
 
     if (index < nparticles)
     {
-        // All threads grab their corresponding input element(s)
-        float weight = particles_weights[index];
-
         // Every other thread merges their input with their neighbor
         // Binary reduction merge
         for (unsigned int stride = 1; stride < nparticles; stride *= 2)
